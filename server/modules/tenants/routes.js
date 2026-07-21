@@ -2,7 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { inviteSchema, acceptInviteSchema } from '../../schemas/auth.js';
+import { inviteSchema, acceptInviteSchema } from './validation.js';
 import { asyncHandler, ApiError } from '../../shared/http.js';
 import { requireAuth, requireTenantAccess, requireRole } from '../../shared/middleware/auth.js';
 import { query, withTransaction } from '../../shared/db.js';

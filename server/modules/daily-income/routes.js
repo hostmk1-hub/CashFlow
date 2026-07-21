@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { dailyIncomeSchema } from '../../schemas/misc.js';
+import { dailyIncomeSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';

@@ -1,5 +1,5 @@
 import multer from 'multer';
-import { scannedInvoiceDraftSchema } from '../../schemas/misc.js';
+import { scannedInvoiceDraftSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';
 

@@ -1,4 +1,4 @@
-import { clientPaymentPreviewSchema, createClientPaymentSchema } from '../../schemas/clientInvoices.js';
+import { clientPaymentPreviewSchema, createClientPaymentSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';
 

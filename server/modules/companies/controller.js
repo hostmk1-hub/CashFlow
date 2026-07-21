@@ -1,4 +1,4 @@
-import { createCompanySchema, updateCompanySchema } from '../../schemas/companies.js';
+import { createCompanySchema, updateCompanySchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';
 

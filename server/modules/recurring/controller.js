@@ -1,4 +1,4 @@
-import { recurringSchema } from '../../schemas/misc.js';
+import { recurringSchema } from './validation.js';
 import { asyncHandler, ApiError } from '../../shared/http.js';
 import * as service from './service.js';
 

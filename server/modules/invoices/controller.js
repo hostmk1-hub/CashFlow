@@ -1,4 +1,4 @@
-import { createInvoiceSchema, invoiceFiltersSchema } from '../../schemas/invoices.js';
+import { createInvoiceSchema, invoiceFiltersSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';
 

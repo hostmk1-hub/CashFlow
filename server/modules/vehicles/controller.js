@@ -1,5 +1,4 @@
-import { createVehicleSchema, updateVehicleSchema } from '../../schemas/vehicles.js';
-import { vehicleIncomeInputSchema } from '../../schemas/misc.js';
+import { createVehicleSchema, updateVehicleSchema, vehicleIncomeInputSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';
 

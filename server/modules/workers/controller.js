@@ -1,4 +1,4 @@
-import { createWorkerSchema, updateWorkerSchema } from '../../schemas/workers.js';
+import { createWorkerSchema, updateWorkerSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';
 

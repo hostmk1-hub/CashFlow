@@ -1,4 +1,4 @@
-import { signupSchema, loginSchema } from '../../schemas/auth.js';
+import { signupSchema, loginSchema } from './validation.js';
 import { signUserToken, signTenantToken } from '../../shared/middleware/auth.js';
 import { asyncHandler } from '../../shared/http.js';
 import * as service from './service.js';

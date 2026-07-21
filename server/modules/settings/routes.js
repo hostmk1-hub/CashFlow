@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import { settingSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';
@@ -24,13 +24,11 @@ router.get(
   }),
 );
 
-const putSchema = z.object({ key: z.string().min(1), value: z.string() });
-
 router.put(
   '/',
   requireMinRole('admin'),
   asyncHandler(async (req, res) => {
-    const { key, value } = putSchema.parse(req.body);
+    const { key, value } = settingSchema.parse(req.body);
     const stored = SECRET_KEYS.has(key) ? encrypt(value) : value;
     await query(
       `INSERT INTO settings (tenant_id, key, value) VALUES ($1,$2,$3)
