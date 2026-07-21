@@ -1,5 +1,6 @@
 import { query, withTransaction } from '../../shared/db.js';
 import { ApiError } from '../../shared/http.js';
+import { invalidateTenant } from '../../shared/cache.js';
 import * as invoiceRepo from '../invoices/repository.js';
 
 export function list(tenantId) {
@@ -93,6 +94,9 @@ export async function generateDueInvoices() {
       );
       await client.query(`UPDATE recurring_templates SET last_generated = $2 WHERE id = $1`, [t.id, monthStart]);
     });
+    // The cron mutates data without an HTTP write, so invalidate the tenant's
+    // cache explicitly (keeps dashboards/reports fresh right after generation).
+    await invalidateTenant(t.tenant_id);
     generated++;
   }
   if (generated) console.log(`[recurring] generated ${generated} invoice(s)`);

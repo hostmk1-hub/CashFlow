@@ -23,7 +23,7 @@ export const config = {
   },
   defaultEurRate: Number(process.env.DEFAULT_EUR_RATE) || 61.8,
   redisUrl: process.env.REDIS_URL || '',
-  cacheTtl: Number(process.env.CACHE_TTL_SECONDS) || 60,
+  cacheTtl: Number(process.env.CACHE_TTL_SECONDS) || 300,
   // SMTP for admin notifications (optional — logs only when unset).
   smtp: {
     host: process.env.SMTP_HOST || '',

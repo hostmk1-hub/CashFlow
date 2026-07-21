@@ -180,12 +180,22 @@ docker compose exec postgres psql -U finance finance   # a psql shell
 
 ## 7. Cache (Redis) & admin notifications
 
-**Redis cache.** The stack includes Redis. Read responses are cached **per
-tenant**, and any write (add/edit/delete) bumps that tenant's cache generation
-so the next read is always fresh — you never see a stale cached copy after an
-edit. It's an accelerator, not a dependency: if Redis is down or `REDIS_URL` is
-unset, the app serves live data unchanged. Responses carry an `X-Cache:
-HIT|MISS` header. Tune with `CACHE_TTL_SECONDS` (default 60).
+**Redis cache.** The stack includes Redis. Read responses (every tenant-scoped
+GET — dashboard, lists, ledgers, reports…) are cached **per tenant**. Logins and
+other auth are never cached. It's an accelerator, not a dependency: if Redis is
+down or `REDIS_URL` is unset, the app serves live data unchanged. Responses
+carry an `X-Cache: HIT|MISS` header.
+
+- **Memory:** `REDIS_MAXMEMORY_GB` in `.env` (default **1 GB**); past the cap,
+  least-recently-used cache keys are evicted (`allkeys-lru`).
+- **Invalidation (this is what keeps data correct):** any **add/edit/delete**
+  in a tenant immediately bumps that tenant's cache generation, so the very next
+  read is fresh — you never see a stale copy after an operation. The nightly
+  recurring-invoice cron invalidates too, and `/notifications` is never cached.
+- **TTL is only a backstop** for anything that could change with no write.
+  `CACHE_TTL_SECONDS` default is **300 (5 min)**. Because writes already
+  invalidate, you can safely raise it to **900–3600** to cut recomputes further;
+  lower it only if you have background data changes not covered above.
 
 **Admin notifications.** Operational alerts (e.g. a failed or unverifiable
 backup) appear:

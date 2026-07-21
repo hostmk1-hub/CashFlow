@@ -22,7 +22,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "60", "1", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    # Memory cap comes from REDIS_MAXMEMORY_GB in .env (default 1 GB); past it,
+    # least-recently-used cache keys are evicted.
+    command: ["redis-server", "--save", "60", "1", "--maxmemory", "${REDIS_MAXMEMORY_GB:-1}gb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redisdata:/data
     healthcheck:

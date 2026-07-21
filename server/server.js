@@ -61,8 +61,10 @@ scoped.use(requireAuth, requireTenantAccess);
 // write (POST/PUT/DELETE) bumps the tenant's cache generation so the next read
 // is fresh — never a stale cached copy after an edit/delete. Binary responses
 // (xlsx) aren't cached because they never call res.json.
+// Endpoints that must always be real-time (never served from cache).
+const NO_CACHE = ['/notifications'];
 scoped.use((req, res, next) => {
-  if (req.method === 'GET') {
+  if (req.method === 'GET' && !NO_CACHE.some((p) => req.path.startsWith(p))) {
     const suffix = `${req.path}?${new URLSearchParams(req.query).toString()}`;
     cacheGet(req.tenantId, suffix)
       .then((hit) => {
