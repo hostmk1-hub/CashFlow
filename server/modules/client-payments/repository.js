@@ -1,0 +1,60 @@
+import { query } from '../../shared/db.js';
+
+export function openClientInvoices(tenantId, companyId) {
+  return query(
+    `SELECT id, amount, paid_amount, due_date, description
+     FROM client_invoices
+     WHERE tenant_id = $1 AND company_id = $2 AND status NOT IN ('draft','paid','cancelled')
+     ORDER BY due_date ASC, id ASC`,
+    [tenantId, companyId],
+  ).then((r) => r.rows);
+}
+
+export function lockOpenClientInvoices(client, tenantId, companyId) {
+  return client
+    .query(
+      `SELECT id, amount, paid_amount, due_date, description
+       FROM client_invoices
+       WHERE tenant_id = $1 AND company_id = $2 AND status NOT IN ('draft','paid','cancelled')
+       ORDER BY due_date ASC, id ASC FOR UPDATE`,
+      [tenantId, companyId],
+    )
+    .then((r) => r.rows);
+}
+
+export function insertPayment(client, tenantId, p) {
+  return client
+    .query(
+      `INSERT INTO client_payments
+        (tenant_id, company_id, amount, method, currency, original_amount, exchange_rate, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [tenantId, p.companyId, p.amount, p.method, p.currency, p.originalAmount || null,
+       p.exchangeRate || 1, p.note || null],
+    )
+    .then((r) => r.rows[0]);
+}
+
+export function applyAllocation(client, { clientPaymentId, clientInvoiceId, amount, newPaid, newStatus }) {
+  return Promise.all([
+    client.query(
+      `INSERT INTO client_payment_allocations (client_payment_id, client_invoice_id, amount)
+       VALUES ($1,$2,$3)`,
+      [clientPaymentId, clientInvoiceId, amount],
+    ),
+    client.query(`UPDATE client_invoices SET paid_amount = $2, status = $3 WHERE id = $1`, [
+      clientInvoiceId, newPaid, newStatus,
+    ]),
+  ]);
+}
+
+export function list(tenantId, companyId) {
+  const params = [tenantId];
+  let sql = `SELECT cp.*, c.name AS company_name FROM client_payments cp
+             JOIN companies c ON c.id = cp.company_id WHERE cp.tenant_id = $1`;
+  if (companyId) {
+    params.push(companyId);
+    sql += ` AND cp.company_id = $${params.length}`;
+  }
+  sql += ` ORDER BY cp.paid_at DESC, cp.id DESC`;
+  return query(sql, params).then((r) => r.rows);
+}

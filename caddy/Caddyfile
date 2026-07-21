@@ -1,0 +1,24 @@
+# Caddy automatically provisions and renews TLS certificates.
+#  • A real domain (finance.rentonic.app) → Let's Encrypt certificate, zero config.
+#  • DOMAIN=localhost → Caddy issues a local self-signed cert for testing.
+# DOMAIN and ACME_EMAIL come from the environment (see .env / docker-compose).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# API → api container
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	# Everything else → the React single-page app (client-side routing fallback)
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

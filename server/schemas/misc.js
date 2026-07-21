@@ -1,0 +1,59 @@
+import { z } from 'zod';
+import { currencyEnum } from './index.js';
+
+export const vehicleIncomeInputSchema = z.object({
+  month: z.string().min(1), // any date within the month; normalized server-side
+  amount: z.coerce.number().min(0),
+  days_rented: z.coerce.number().int().min(0).max(31).default(0),
+  currency: currencyEnum,
+  exchange_rate: z.coerce.number().positive().optional(),
+});
+
+export const dailyIncomeSchema = z.object({
+  income_date: z.string().min(1),
+  cash_amount: z.coerce.number().min(0).default(0),
+  card_amount: z.coerce.number().min(0).default(0),
+  note: z.string().nullish(),
+});
+
+export const recurringSchema = z
+  .object({
+    company_id: z.coerce.number().int().positive().nullish(),
+    worker_id: z.coerce.number().int().positive().nullish(),
+    vehicle_id: z.coerce.number().int().positive().nullish(),
+    description: z.string().min(1).max(300),
+    amount: z.coerce.number().positive(),
+    day_of_month: z.coerce.number().int().min(1).max(28),
+    active: z.boolean().default(true),
+  })
+  .refine((v) => v.company_id || v.worker_id, {
+    message: 'Either company_id or worker_id is required',
+  });
+
+export const amortizationSchema = z.object({
+  vehicle_id: z.coerce.number().int().positive(),
+  company_id: z.coerce.number().int().positive(),
+  total_amount: z.coerce.number().positive(),
+  down_payment: z.coerce.number().min(0).default(0),
+  monthly_amount: z.coerce.number().positive(),
+  months_total: z.coerce.number().int().positive(),
+  interest_rate: z.coerce.number().min(0).nullish(),
+  start_date: z.string().min(1),
+  currency: currencyEnum,
+  exchange_rate: z.coerce.number().positive().optional(),
+  scan_url: z.string().nullish(),
+  generate_invoices: z.boolean().default(true),
+});
+
+export const scannedInvoiceDraftSchema = z.object({
+  invoice_number: z.string().nullish(),
+  description: z.string().nullish(),
+  amount: z.coerce.number().nullish(),
+  currency: currencyEnum,
+  date: z.string().nullish(),
+  vendor_name: z.string().nullish(),
+  matched_company_id: z.coerce.number().int().positive().nullish(),
+  matched_vehicle_id: z.coerce.number().int().positive().nullish(),
+  detected_plate: z.string().nullish(),
+  exchange_rate: z.coerce.number().positive().optional(),
+});
