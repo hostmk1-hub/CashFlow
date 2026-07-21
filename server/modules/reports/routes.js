@@ -12,6 +12,9 @@ const EXPORTERS = {
   'outstanding-clients': service.outstandingClients,
   'fleet-amortization': service.fleetAmortization,
   'vehicle-utilization': service.vehicleUtilization,
+  'vehicle-cost': (t) => service.vehicleCost(t),
+  'salary': service.salaryReport,
+  'upcoming-payments': (t) => service.upcomingPayments(t),
 };
 router.get(
   '/reports/:name/export.xlsx',
@@ -37,5 +40,10 @@ router.get('/reports/outstanding-vendors', asyncHandler(async (req, res) => res.
 router.get('/reports/outstanding-clients', asyncHandler(async (req, res) => res.json(await service.outstandingClients(req.tenantId))));
 router.get('/reports/fleet-amortization', asyncHandler(async (req, res) => res.json(await service.fleetAmortization(req.tenantId))));
 router.get('/reports/vehicle-utilization', asyncHandler(async (req, res) => res.json(await service.vehicleUtilization(req.tenantId))));
+router.get('/reports/vehicle-cost', asyncHandler(async (req, res) => res.json(await service.vehicleCost(req.tenantId, req.query.from, req.query.to))));
+router.get('/reports/salary', asyncHandler(async (req, res) => res.json(await service.salaryReport(req.tenantId))));
+router.get('/reports/upcoming-payments', asyncHandler(async (req, res) => res.json(await service.upcomingPayments(req.tenantId, Number(req.query.days) || 30))));
+router.get('/reports/company-statement/:companyId', asyncHandler(async (req, res) => res.json(await service.companyStatement(req.tenantId, Number(req.params.companyId)))));
+router.get('/reports/client-statement/:companyId', asyncHandler(async (req, res) => res.json(await service.clientStatement(req.tenantId, Number(req.params.companyId)))));
 
 export default router;

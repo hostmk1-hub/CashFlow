@@ -124,3 +124,82 @@ export function vehicleUtilization(tenantId) {
     [tenantId],
   ).then((r) => r.rows);
 }
+
+// Vehicle Cost Report — total expenses per plate (optional date range).
+export function vehicleCost(tenantId, from, to) {
+  return query(
+    `SELECT v.plate, v.make, v.model,
+            COUNT(i.id)::int AS invoice_count,
+            COALESCE(SUM(i.amount),0) AS total_expenses
+     FROM vehicles v
+     LEFT JOIN invoices i ON i.vehicle_id = v.id AND i.tenant_id = v.tenant_id
+       AND i.due_date BETWEEN $2 AND $3
+     WHERE v.tenant_id = $1
+     GROUP BY v.id, v.plate, v.make, v.model
+     ORDER BY total_expenses DESC`,
+    [tenantId, from || '1900-01-01', to || '2999-01-01'],
+  ).then((r) => r.rows);
+}
+
+// Salary Report — worker salary invoices for the current month (paid/unpaid).
+export function salaryReport(tenantId) {
+  return query(
+    `SELECT w.name AS worker, w.position, i.description, i.amount, i.paid_amount,
+            i.status, i.due_date
+     FROM invoices i JOIN workers w ON w.id = i.worker_id
+     WHERE i.tenant_id = $1 AND i.source = 'salary'
+       AND date_trunc('month', i.due_date) = date_trunc('month', CURRENT_DATE)
+     ORDER BY w.name`,
+    [tenantId],
+  ).then((r) => r.rows);
+}
+
+// Upcoming Payments — everything due in the next N days (lease/salary/recurring/client).
+export async function upcomingPayments(tenantId, days = 30) {
+  const payables = (await query(
+    `SELECT 'payable' AS kind, description, due_date, (amount - paid_amount) AS amount
+     FROM invoices WHERE tenant_id=$1 AND status != 'paid'
+       AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + ($2 || ' days')::interval`,
+    [tenantId, String(days)],
+  )).rows;
+  const receivables = (await query(
+    `SELECT 'receivable' AS kind, description, due_date, (amount - paid_amount) AS amount
+     FROM client_invoices WHERE tenant_id=$1 AND status NOT IN ('draft','paid','cancelled')
+       AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + ($2 || ' days')::interval`,
+    [tenantId, String(days)],
+  )).rows;
+  return [...payables, ...receivables].sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+}
+
+// Company Statement — full vendor ledger for one company (printable).
+export async function companyStatement(tenantId, companyId) {
+  const company = (await query(`SELECT * FROM companies WHERE tenant_id=$1 AND id=$2`, [tenantId, companyId])).rows[0];
+  const invoices = (await query(
+    `SELECT 'invoice' AS entry, description, due_date AS date, amount, paid_amount, status
+     FROM invoices WHERE tenant_id=$1 AND company_id=$2 ORDER BY due_date`,
+    [tenantId, companyId],
+  )).rows;
+  const payments = (await query(
+    `SELECT 'payment' AS entry, note AS description, paid_at AS date, amount, method
+     FROM payments WHERE tenant_id=$1 AND company_id=$2 ORDER BY paid_at`,
+    [tenantId, companyId],
+  )).rows;
+  const totals = (await query(`SELECT * FROM company_balances WHERE tenant_id=$1 AND id=$2`, [tenantId, companyId])).rows[0];
+  return { company, totals, invoices, payments };
+}
+
+// Client Statement — full receivables ledger for one client (printable).
+export async function clientStatement(tenantId, companyId) {
+  const company = (await query(`SELECT * FROM companies WHERE tenant_id=$1 AND id=$2`, [tenantId, companyId])).rows[0];
+  const invoices = (await query(
+    `SELECT invoice_number, description, issue_date, due_date, amount, paid_amount, status
+     FROM client_invoices WHERE tenant_id=$1 AND company_id=$2 ORDER BY issue_date`,
+    [tenantId, companyId],
+  )).rows;
+  const payments = (await query(
+    `SELECT amount, method, paid_at, note FROM client_payments WHERE tenant_id=$1 AND company_id=$2 ORDER BY paid_at`,
+    [tenantId, companyId],
+  )).rows;
+  const totals = (await query(`SELECT * FROM client_balances WHERE tenant_id=$1 AND id=$2`, [tenantId, companyId])).rows[0];
+  return { company, totals, invoices, payments };
+}
