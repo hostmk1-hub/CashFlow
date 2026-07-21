@@ -1,13 +1,9 @@
 import { z } from 'zod';
 import { currencyEnum } from './index.js';
 
-export const vehicleIncomeInputSchema = z.object({
-  month: z.string().min(1), // any date within the month; normalized server-side
-  amount: z.coerce.number().min(0),
-  days_rented: z.coerce.number().int().min(0).max(31).default(0),
-  currency: currencyEnum,
-  exchange_rate: z.coerce.number().positive().optional(),
-});
+// Re-exported from their own spec-named files (Step 2b) for convenience.
+export { vehicleIncomeInputSchema } from './vehicleIncome.js';
+export { scannedInvoiceDraftSchema } from './scannedInvoice.js';
 
 export const dailyIncomeSchema = z.object({
   income_date: z.string().min(1),
@@ -43,17 +39,4 @@ export const amortizationSchema = z.object({
   exchange_rate: z.coerce.number().positive().optional(),
   scan_url: z.string().nullish(),
   generate_invoices: z.boolean().default(true),
-});
-
-export const scannedInvoiceDraftSchema = z.object({
-  invoice_number: z.string().nullish(),
-  description: z.string().nullish(),
-  amount: z.coerce.number().nullish(),
-  currency: currencyEnum,
-  date: z.string().nullish(),
-  vendor_name: z.string().nullish(),
-  matched_company_id: z.coerce.number().int().positive().nullish(),
-  matched_vehicle_id: z.coerce.number().int().positive().nullish(),
-  detected_plate: z.string().nullish(),
-  exchange_rate: z.coerce.number().positive().optional(),
 });
