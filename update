@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Convenience wrapper so `./update` works (delegates to update.sh).
+exec "$(dirname "$0")/update.sh" "$@"

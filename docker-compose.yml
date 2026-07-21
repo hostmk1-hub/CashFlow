@@ -34,6 +34,13 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       DEFAULT_EUR_RATE: ${DEFAULT_EUR_RATE:-61.8}
+      # Cloudflare R2 off-site backup (optional — leave blank for local-only backups)
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PREFIX: ${R2_PREFIX:-finance-backups/}
     # Migrations run automatically on startup (schema.sql is idempotent).
     # Persist generated invoice PDFs and nightly pg_dump backups across redeploys.
     volumes:

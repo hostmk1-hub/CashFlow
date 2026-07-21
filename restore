@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Convenience wrapper so `./restore` works (delegates to restore.sh).
+exec "$(dirname "$0")/restore.sh" "$@"

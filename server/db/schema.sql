@@ -261,6 +261,13 @@ CREATE TABLE IF NOT EXISTS settings (
   UNIQUE (tenant_id, key)
 );
 
+-- ===== PostgreSQL 18: VIRTUAL generated columns =====
+-- `remaining` is computed live from amount - paid_amount (no storage, always
+-- current). VIRTUAL generated columns are new in PostgreSQL 18. Guarded with
+-- IF NOT EXISTS so the migration stays idempotent.
+ALTER TABLE invoices        ADD COLUMN IF NOT EXISTS remaining NUMERIC(12,2) GENERATED ALWAYS AS (amount - paid_amount) VIRTUAL;
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS remaining NUMERIC(12,2) GENERATED ALWAYS AS (amount - paid_amount) VIRTUAL;
+
 -- ===== Derived views =====
 
 CREATE OR REPLACE VIEW company_balances AS

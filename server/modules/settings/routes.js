@@ -6,6 +6,7 @@ import { query } from '../../shared/db.js';
 import { encrypt } from '../../shared/crypto.js';
 import { testConnection } from '../../services/geminiService.js';
 import { runBackup, lastBackup } from '../../services/backupService.js';
+import { r2Enabled } from '../../shared/config.js';
 
 const router = Router();
 
@@ -51,7 +52,7 @@ router.post(
 router.get(
   '/backup/status',
   asyncHandler(async (_req, res) => {
-    res.json({ last: lastBackup() });
+    res.json({ last: lastBackup(), r2Enabled: r2Enabled() });
   }),
 );
 router.post(

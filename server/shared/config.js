@@ -22,4 +22,20 @@ export const config = {
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   },
   defaultEurRate: Number(process.env.DEFAULT_EUR_RATE) || 61.8,
+  // Cloudflare R2 (S3-compatible) off-site backup target. All optional — when
+  // unset, backups stay local only.
+  r2: {
+    endpoint:
+      process.env.R2_ENDPOINT ||
+      (process.env.R2_ACCOUNT_ID
+        ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+        : ''),
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+    bucket: process.env.R2_BUCKET || '',
+    prefix: process.env.R2_PREFIX || 'finance-backups/',
+  },
 };
+
+export const r2Enabled = () =>
+  Boolean(config.r2.endpoint && config.r2.accessKeyId && config.r2.secretAccessKey && config.r2.bucket);

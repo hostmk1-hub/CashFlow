@@ -99,6 +99,7 @@ export default function Settings() {
           <div style={{ fontSize: 13, marginBottom: 10 }}>
             Last backup: <b>{backup?.last ? new Date(backup.last.at).toLocaleString() : 'never'}</b>
             {backup?.last && <div className="muted">{backup.last.file}</div>}
+            <div className="muted">Off-site (R2): {backup?.r2Enabled ? '✅ enabled' : '— not configured'}</div>
           </div>
           <button className="btn ghost" disabled={!canManage} onClick={backupNow}>Backup Now (pg_dump)</button>
           <div style={{ fontSize: 13, marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}>

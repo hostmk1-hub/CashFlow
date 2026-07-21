@@ -43,6 +43,19 @@ Then open **https://your-domain** (or **https://localhost** locally).
 Prefer to do it by hand? `cp .env.example .env`, edit it, then
 `docker compose up -d --build`.
 
+**Day-2 operations** — install, update, backup, and disaster recovery — are in
+**[DEPLOYMENT.md](./DEPLOYMENT.md)**. The short version:
+
+```bash
+./setup      # fresh install (installs Docker if missing)
+./update     # pull latest from GitHub, back up, rebuild, migrate, restart
+./restore    # restore the DB from a local or R2 backup
+```
+
+Backups run nightly (03:00) via an in-container cron and, when Cloudflare R2 is
+configured (`R2_*` in `.env`), upload off-site so a total host loss is
+recoverable in minutes.
+
 Demo login after `--seed`: **owner@driverent.mk / password123** (owner of two
 companies) · **staff@driverent.mk / password123**.
 
