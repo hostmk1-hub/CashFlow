@@ -3,6 +3,7 @@ import { asyncHandler, ApiError } from '../../shared/http.js';
 import * as service from './service.js';
 
 export const list = asyncHandler(async (req, res) => res.json(await service.list(req.tenantId)));
+export const status = asyncHandler(async (req, res) => res.json(await service.status(req.tenantId)));
 export const create = asyncHandler(async (req, res) =>
   res.status(201).json(await service.create(req.tenantId, recurringSchema.parse(req.body))),
 );

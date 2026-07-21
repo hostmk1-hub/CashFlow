@@ -13,6 +13,7 @@ export default function Settings() {
   const [inviteLink, setInviteLink] = useState('');
   const [msg, setMsg] = useState('');
   const [backup, setBackup] = useState(null);
+  const [recurring, setRecurring] = useState(null);
   const [letterhead, setLetterhead] = useState({ company_name: '', company_address: '', company_phone: '' });
   const [rentalsystKey, setRentalsystKey] = useState('');
   const canManage = ['owner', 'admin'].includes(activeTenant?.role);
@@ -25,6 +26,7 @@ export default function Settings() {
       setLetterhead({ company_name: s.company_name || '', company_address: s.company_address || '', company_phone: s.company_phone || '' });
     });
     api.get('/settings/backup/status').then(setBackup).catch(() => {});
+    api.get('/recurring/status').then(setRecurring).catch(() => {});
     if (canManage) api.get(`/tenants/${activeTenant.id}/users`).then(setTeam).catch(() => {});
   };
   useEffect(() => { load(); }, []);
@@ -99,6 +101,11 @@ export default function Settings() {
             {backup?.last && <div className="muted">{backup.last.file}</div>}
           </div>
           <button className="btn ghost" disabled={!canManage} onClick={backupNow}>Backup Now (pg_dump)</button>
+          <div style={{ fontSize: 13, marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <b>Recurring engine</b>
+            <div className="muted">Last run: {recurring?.lastRun ? new Date(recurring.lastRun).toLocaleDateString() : 'never'} · Next run: {recurring?.nextRun ? new Date(recurring.nextRun).toLocaleString() : '—'}</div>
+            <div className="muted">Active templates: {recurring?.activeTemplates ?? '—'}</div>
+          </div>
           <Field label="RENTALsyst API key" >
             <input className="input" type="password" placeholder={settings.rentalsyst_api_key || 'not set'} value={rentalsystKey} onChange={(e) => setRentalsystKey(e.target.value)} />
           </Field>

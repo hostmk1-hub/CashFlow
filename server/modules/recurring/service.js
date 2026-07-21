@@ -38,6 +38,28 @@ export function remove(tenantId, id) {
 }
 
 /**
+ * Recurring-engine status for the Settings page: when it last generated an
+ * invoice for this tenant, and when the daily cron (00:05) next runs.
+ */
+export async function status(tenantId) {
+  const { rows } = await query(
+    `SELECT MAX(last_generated) AS last_generated,
+            COUNT(*) FILTER (WHERE active) AS active_templates
+     FROM recurring_templates WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(0, 5, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return {
+    lastRun: rows[0].last_generated,
+    nextRun: next.toISOString(),
+    activeTemplates: Number(rows[0].active_templates),
+  };
+}
+
+/**
  * Cron entry point: for each active template not yet generated this month,
  * create an invoice due on this month's day_of_month and stamp last_generated.
  * Runs across all tenants (the daily job is global).
