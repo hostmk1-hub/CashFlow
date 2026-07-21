@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd } from '../lib/format.js';
-import { Modal, Field, Spinner, Empty } from '../components/ui.jsx';
+import { Spinner, Empty } from '../components/ui.jsx';
+import { Card } from '../components/ui/card.jsx';
+import { Button } from '../components/ui/button.jsx';
+import { Input } from '../components/ui/input.jsx';
+import { Label } from '../components/ui/label.jsx';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table.jsx';
+import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../components/ui/dialog.jsx';
 import PayModal from '../components/PayModal.jsx';
 
 export default function Workers() {
@@ -16,25 +22,35 @@ export default function Workers() {
     <>
       <div className="page-head">
         <div className="page-title">Workers</div>
-        <button className="btn" onClick={() => setEditing({})}>+ Add Worker</button>
+        <Button onClick={() => setEditing({})}>+ Add Worker</Button>
       </div>
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No workers yet.</Empty> : (
-        <div className="card table-wrap">
-          <table className="tbl">
-            <thead><tr><th>Name</th><th>Position</th><th className="num">Net salary</th><th className="num">Payday</th><th className="num">Open balance</th><th></th></tr></thead>
-            <tbody>{rows.map((w) => (
-              <tr key={w.id}>
-                <td><b>{w.name}</b></td><td className="muted">{w.position || '—'}</td>
-                <td className="num">{mkd(w.net_salary)}</td><td className="num">day {w.payday_day}</td>
-                <td className="num">{mkd(w.open_balance)}</td>
-                <td className="num">
-                  <button className="btn ghost sm" onClick={() => setEditing(w)}>Edit</button>{' '}
-                  <button className="btn sm" onClick={() => setPaying(w)}>Pay</button>
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead><TableHead>Position</TableHead>
+                <TableHead className="text-right">Net salary</TableHead><TableHead className="text-right">Payday</TableHead>
+                <TableHead className="text-right">Open balance</TableHead><TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((w) => (
+                <TableRow key={w.id}>
+                  <TableCell className="font-semibold">{w.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{w.position || '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{mkd(w.net_salary)}</TableCell>
+                  <TableCell className="text-right">day {w.payday_day}</TableCell>
+                  <TableCell className="text-right tabular-nums">{mkd(w.open_balance)}</TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button variant="outline" size="sm" onClick={() => setEditing(w)}>Edit</Button>
+                    <Button size="sm" onClick={() => setPaying(w)}>Pay</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
       {editing && <WorkerModal worker={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {paying && <PayModal worker={paying} onClose={() => setPaying(null)} onDone={() => { setPaying(null); load(); }} />}
@@ -56,15 +72,21 @@ function WorkerModal({ worker, onClose, onSaved }) {
     } catch (e) { setErr(e.message); }
   }
   return (
-    <Modal title={isNew ? 'Add Worker' : 'Edit Worker'} onClose={onClose}
-      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" onClick={save}>Save</button></>}>
-      {err && <div className="error-msg">{err}</div>}
-      <Field label="Name"><input className="input" value={f.name} onChange={set('name')} /></Field>
-      <Field label="Position"><input className="input" value={f.position || ''} onChange={set('position')} /></Field>
-      <div className="row2">
-        <Field label="Net salary (MKD)"><input className="input" type="number" value={f.net_salary} onChange={set('net_salary')} /></Field>
-        <Field label="Payday (1-28)"><input className="input" type="number" min={1} max={28} value={f.payday_day} onChange={set('payday_day')} /></Field>
-      </div>
-    </Modal>
+    <Dialog onOpenChange={onClose}>
+      <DialogHeader title={isNew ? 'Add Worker' : 'Edit Worker'} onClose={onClose} />
+      <DialogBody className="space-y-3">
+        {err && <div className="error-msg">{err}</div>}
+        <div><Label>Name</Label><Input value={f.name} onChange={set('name')} /></div>
+        <div><Label>Position</Label><Input value={f.position || ''} onChange={set('position')} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Net salary (MKD)</Label><Input type="number" value={f.net_salary} onChange={set('net_salary')} /></div>
+          <div><Label>Payday (1-28)</Label><Input type="number" min={1} max={28} value={f.payday_day} onChange={set('payday_day')} /></div>
+        </div>
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button onClick={save}>Save</Button>
+      </DialogFooter>
+    </Dialog>
   );
 }

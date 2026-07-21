@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { mkd } from '../lib/format.js';
-import { Modal, Field, Spinner, Badge, Empty } from '../components/ui.jsx';
+import { Spinner, Empty } from '../components/ui.jsx';
+import { Card } from '../components/ui/card.jsx';
+import { Button } from '../components/ui/button.jsx';
+import { Badge } from '../components/ui/badge.jsx';
+import { Input, Textarea } from '../components/ui/input.jsx';
+import { Label } from '../components/ui/label.jsx';
+import { Select } from '../components/ui/select.jsx';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table.jsx';
+import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../components/ui/dialog.jsx';
 
 const CATEGORIES = ['leasing', 'service', 'tires', 'other'];
-const TYPE_TONE = { vendor: 'gray', client: 'green', both: 'blue' };
+const TYPE_VARIANT = { vendor: 'gray', client: 'green', both: 'blue' };
 
 export default function Companies() {
   const nav = useNavigate();
@@ -19,27 +27,34 @@ export default function Companies() {
     <>
       <div className="page-head">
         <div className="page-title">Companies</div>
-        <button className="btn" onClick={() => setEditing({})}>+ Add Company</button>
+        <Button onClick={() => setEditing({})}>+ Add Company</Button>
       </div>
 
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No companies yet.</Empty> : (
-        <div className="card table-wrap">
-          <table className="tbl">
-            <thead><tr><th>Name</th><th>Type</th><th>Category</th><th>Phone</th><th className="num">Open balance</th><th></th></tr></thead>
-            <tbody>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Category</TableHead>
+                <TableHead>Phone</TableHead><TableHead className="text-right">Open balance</TableHead><TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((c) => (
-                <tr key={c.id} className="clickable" onClick={() => nav(`/companies/${c.id}`)}>
-                  <td><b>{c.name}</b></td>
-                  <td><Badge tone={TYPE_TONE[c.type]}>{c.type}</Badge></td>
-                  <td className="muted">{c.category || '—'}</td>
-                  <td className="muted">{c.phone || '—'}</td>
-                  <td className="num"><b>{mkd(c.open_balance)}</b></td>
-                  <td className="num"><button className="btn ghost sm" onClick={(e) => { e.stopPropagation(); setEditing(c); }}>Edit</button></td>
-                </tr>
+                <TableRow key={c.id} clickable onClick={() => nav(`/companies/${c.id}`)}>
+                  <TableCell className="font-semibold">{c.name}</TableCell>
+                  <TableCell><Badge variant={TYPE_VARIANT[c.type]}>{c.type}</Badge></TableCell>
+                  <TableCell className="text-muted-foreground">{c.category || '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.phone || '—'}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">{mkd(c.open_balance)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setEditing(c); }}>Edit</Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
 
       {editing && <CompanyModal company={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
@@ -64,25 +79,30 @@ function CompanyModal({ company, onClose, onSaved }) {
   }
 
   return (
-    <Modal title={isNew ? 'Add Company' : 'Edit Company'} onClose={onClose}
-      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" onClick={save}>Save</button></>}>
-      {err && <div className="error-msg">{err}</div>}
-      <Field label="Name"><input className="input" value={f.name} onChange={set('name')} /></Field>
-      <div className="row2">
-        <Field label="Type">
-          <select className="select" value={f.type} onChange={set('type')}>
-            <option value="vendor">Vendor</option><option value="client">Client</option><option value="both">Both</option>
-          </select>
-        </Field>
-        <Field label="Category">
-          <select className="select" value={f.category || ''} onChange={set('category')}>
-            <option value="">—</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </Field>
-      </div>
-      <Field label="Phone"><input className="input" value={f.phone || ''} onChange={set('phone')} /></Field>
-      <Field label="Note"><textarea className="input" rows={2} value={f.note || ''} onChange={set('note')} /></Field>
-    </Modal>
+    <Dialog onOpenChange={onClose}>
+      <DialogHeader title={isNew ? 'Add Company' : 'Edit Company'} onClose={onClose} />
+      <DialogBody className="space-y-3">
+        {err && <div className="error-msg">{err}</div>}
+        <div><Label>Name</Label><Input value={f.name} onChange={set('name')} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Type</Label>
+            <Select value={f.type} onChange={set('type')}>
+              <option value="vendor">Vendor</option><option value="client">Client</option><option value="both">Both</option>
+            </Select>
+          </div>
+          <div><Label>Category</Label>
+            <Select value={f.category || ''} onChange={set('category')}>
+              <option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </div>
+        </div>
+        <div><Label>Phone</Label><Input value={f.phone || ''} onChange={set('phone')} /></div>
+        <div><Label>Note</Label><Textarea rows={2} value={f.note || ''} onChange={set('note')} /></div>
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button onClick={save}>Save</Button>
+      </DialogFooter>
+    </Dialog>
   );
 }
