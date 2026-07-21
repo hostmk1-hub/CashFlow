@@ -1,8 +1,31 @@
 import { Router } from 'express';
-import { asyncHandler } from '../../shared/http.js';
+import { asyncHandler, ApiError } from '../../shared/http.js';
+import { buildWorkbook } from '../../services/excelService.js';
 import * as service from './service.js';
 
 const router = Router();
+
+// Excel export for any report: GET /api/reports/:name/export.xlsx
+const EXPORTERS = {
+  'cash-flow': (t) => service.cashFlowReport(t),
+  'outstanding-vendors': service.outstandingVendors,
+  'outstanding-clients': service.outstandingClients,
+  'fleet-amortization': service.fleetAmortization,
+  'vehicle-utilization': service.vehicleUtilization,
+};
+router.get(
+  '/reports/:name/export.xlsx',
+  asyncHandler(async (req, res) => {
+    const fn = EXPORTERS[req.params.name];
+    if (!fn) throw new ApiError(404, 'Unknown report');
+    const rows = await fn(req.tenantId);
+    const wb = await buildWorkbook(req.params.name, rows);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${req.params.name}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  }),
+);
 
 router.get('/dashboard', asyncHandler(async (req, res) => res.json(await service.dashboard(req.tenantId))));
 router.get('/reminders', asyncHandler(async (req, res) => res.json(await service.reminders(req.tenantId))));

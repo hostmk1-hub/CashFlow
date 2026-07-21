@@ -8,6 +8,7 @@ import { runMigrations } from './scripts/migrate.js';
 import { errorHandler } from './shared/http.js';
 import { requireAuth, requireTenantAccess } from './shared/middleware/auth.js';
 import { generateDueInvoices } from './modules/recurring/service.js';
+import { runBackup } from './services/backupService.js';
 
 // Module routers
 import authRoutes from './modules/auth/routes.js';
@@ -26,9 +27,16 @@ import amortizationRoutes from './modules/amortization/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import reportsRoutes from './modules/reports/routes.js';
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
+
+// Serve generated files (invoice PDFs, scan uploads).
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ── Public ────────────────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
@@ -69,6 +77,11 @@ async function start() {
   // Recurring engine: daily at 00:05 generate this month's due invoices.
   cron.schedule('5 0 * * *', () => {
     generateDueInvoices().catch((err) => console.error('[cron] recurring failed', err));
+  });
+
+  // Nightly database backup (pg_dump → gzip) at 03:00.
+  cron.schedule('0 3 * * *', () => {
+    runBackup().catch((err) => console.error('[cron] backup failed', err));
   });
 
   app.listen(config.port, () => {

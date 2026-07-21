@@ -16,19 +16,19 @@ export default function Reports() {
 
   useEffect(() => { setRows(null); api.get(`/reports/${active}`).then(setRows).catch(() => setRows([])); }, [active]);
 
-  function exportCsv() {
-    if (!rows?.length) return;
-    const cols = Object.keys(rows[0]);
-    const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }); // BOM = Cyrillic-safe in Excel
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${active}.csv`; a.click();
+  const [exporting, setExporting] = useState(false);
+  async function exportXlsx() {
+    setExporting(true);
+    try { await api.download(`/reports/${active}/export.xlsx`, `${active}.xlsx`); }
+    catch (e) { alert(e.message); }
+    finally { setExporting(false); }
   }
 
   return (
     <>
       <div className="page-head">
         <div className="page-title">Reports</div>
-        <button className="btn ghost" onClick={exportCsv}>⬇ Export CSV</button>
+        <button className="btn ghost" onClick={exportXlsx} disabled={exporting}>{exporting ? 'Exporting…' : '⬇ Export Excel'}</button>
       </div>
 
       <div className="chip-row" style={{ marginBottom: 16 }}>

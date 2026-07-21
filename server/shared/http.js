@@ -28,6 +28,10 @@ export function errorHandler(err, _req, res, _next) {
   if (err?.code === '23505') {
     return res.status(409).json({ error: 'Duplicate value', details: err.detail });
   }
+  // Any error carrying an explicit HTTP status (e.g. the Gemini service) → honor it.
+  if (Number.isInteger(err?.status) && err.status >= 400 && err.status < 600) {
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error('[error]', err);
   return res.status(500).json({ error: 'Internal server error' });
 }

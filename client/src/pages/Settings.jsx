@@ -12,13 +12,28 @@ export default function Settings() {
   const [invite, setInvite] = useState({ email: '', role: 'staff' });
   const [inviteLink, setInviteLink] = useState('');
   const [msg, setMsg] = useState('');
+  const [backup, setBackup] = useState(null);
+  const [letterhead, setLetterhead] = useState({ company_name: '', company_address: '', company_phone: '' });
+  const [rentalsystKey, setRentalsystKey] = useState('');
   const canManage = ['owner', 'admin'].includes(activeTenant?.role);
+  const EXPENSE_CATEGORIES = ['Leasing', 'Service', 'Tires', 'Other'];
 
   const load = () => {
-    api.get('/settings').then((s) => { setSettings(s); setEurRate(s.default_eur_rate || '61.8'); });
+    api.get('/settings').then((s) => {
+      setSettings(s);
+      setEurRate(s.default_eur_rate || '61.8');
+      setLetterhead({ company_name: s.company_name || '', company_address: s.company_address || '', company_phone: s.company_phone || '' });
+    });
+    api.get('/settings/backup/status').then(setBackup).catch(() => {});
     if (canManage) api.get(`/tenants/${activeTenant.id}/users`).then(setTeam).catch(() => {});
   };
   useEffect(() => { load(); }, []);
+
+  async function backupNow() {
+    setMsg('Running backup…');
+    try { const r = await api.post('/settings/backup/run'); setMsg(r.ok ? `Backup written: ${r.file}` : `Backup failed: ${r.error}`); load(); }
+    catch (e) { setMsg(e.message); }
+  }
 
   async function saveSetting(key, value) {
     setMsg('');
@@ -66,6 +81,38 @@ export default function Settings() {
             <input className="input" defaultValue={settings.invoice_number_format || 'INV-{year}-{seq}'} onBlur={(e) => canManage && saveSetting('invoice_number_format', e.target.value)} />
           </Field>
         </div>
+      </div>
+
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 16 }}>
+        <div className="card pad">
+          <h3 className="card-title">Company letterhead (PDF invoices)</h3>
+          <Field label="Company name"><input className="input" value={letterhead.company_name} onChange={(e) => setLetterhead({ ...letterhead, company_name: e.target.value })} /></Field>
+          <Field label="Address"><input className="input" value={letterhead.company_address} onChange={(e) => setLetterhead({ ...letterhead, company_address: e.target.value })} /></Field>
+          <Field label="Phone"><input className="input" value={letterhead.company_phone} onChange={(e) => setLetterhead({ ...letterhead, company_phone: e.target.value })} /></Field>
+          <button className="btn" disabled={!canManage} onClick={async () => { for (const k of ['company_name', 'company_address', 'company_phone']) await saveSetting(k, letterhead[k]); }}>Save letterhead</button>
+        </div>
+
+        <div className="card pad">
+          <h3 className="card-title">Backups & integrations</h3>
+          <div style={{ fontSize: 13, marginBottom: 10 }}>
+            Last backup: <b>{backup?.last ? new Date(backup.last.at).toLocaleString() : 'never'}</b>
+            {backup?.last && <div className="muted">{backup.last.file}</div>}
+          </div>
+          <button className="btn ghost" disabled={!canManage} onClick={backupNow}>Backup Now (pg_dump)</button>
+          <Field label="RENTALsyst API key" >
+            <input className="input" type="password" placeholder={settings.rentalsyst_api_key || 'not set'} value={rentalsystKey} onChange={(e) => setRentalsystKey(e.target.value)} />
+          </Field>
+          <div className="toolbar">
+            <button className="btn" disabled={!canManage || !rentalsystKey} onClick={() => saveSetting('rentalsyst_api_key', rentalsystKey)}>Save key</button>
+            <button className="btn ghost" disabled title="Integration point — wire to RENTALsyst API">Sync Now</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card pad" style={{ marginTop: 16 }}>
+        <h3 className="card-title">Expense categories</h3>
+        <p className="muted" style={{ marginTop: -6 }}>Deliberately fixed to keep expense tracking simple (fuel/fines stay in RENTALsyst).</p>
+        <div className="chip-row">{EXPENSE_CATEGORIES.map((c) => <Badge key={c} tone="gray">{c}</Badge>)}</div>
       </div>
 
       {canManage && (

@@ -8,6 +8,7 @@ npm-debug.log*
 .DS_Store
 coverage/
 server/uploads/
+server/backups/
 caddy/data/
 caddy/config/
 *.pem

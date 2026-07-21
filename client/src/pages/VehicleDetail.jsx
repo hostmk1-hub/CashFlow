@@ -12,9 +12,11 @@ export default function VehicleDetail() {
   const nav = useNavigate();
   const [d, setD] = useState(null);
   const [incomeOpen, setIncomeOpen] = useState(false);
+  const [amortOpen, setAmortOpen] = useState(false);
+  const [companies, setCompanies] = useState([]);
 
   const load = () => api.get(`/vehicles/${id}`).then(setD).catch(() => {});
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); api.get('/companies').then(setCompanies).catch(() => {}); }, [id]);
   if (!d) return <Spinner />;
 
   const plan = d.plans[0];
@@ -36,7 +38,10 @@ export default function VehicleDetail() {
           <div className="muted" style={{ cursor: 'pointer' }} onClick={() => nav('/vehicles')}>← Vehicles</div>
           <div className="page-title">{d.vehicle.plate} · {d.vehicle.make} {d.vehicle.model}</div>
         </div>
-        <button className="btn" onClick={() => setIncomeOpen(true)}>+ Monthly Income</button>
+        <div className="toolbar">
+          <button className="btn ghost" onClick={() => setAmortOpen(true)}>+ Amortization Plan</button>
+          <button className="btn" onClick={() => setIncomeOpen(true)}>+ Monthly Income</button>
+        </div>
       </div>
 
       {underperforming && (
@@ -109,7 +114,79 @@ export default function VehicleDetail() {
       </div>
 
       {incomeOpen && <IncomeModal vehicleId={id} onClose={() => setIncomeOpen(false)} onSaved={() => { setIncomeOpen(false); load(); }} />}
+      {amortOpen && <AmortizationModal vehicleId={id} companies={companies} onClose={() => setAmortOpen(false)} onSaved={() => { setAmortOpen(false); load(); }} />}
     </>
+  );
+}
+
+function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
+  const [mode, setMode] = useState('manual'); // manual | scan
+  const [f, setF] = useState({ company_id: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  async function onScan(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const draft = await api.upload('/amortization/scan', fd);
+      // pre-fill the manual form with extracted numbers, then let the user review
+      setF((prev) => ({ ...prev, total_amount: draft.total_amount ?? '', down_payment: draft.down_payment ?? 0, monthly_amount: draft.monthly_amount ?? '', months_total: draft.months_total ?? 12, interest_rate: draft.interest_rate ?? '', start_date: draft.start_date ?? prev.start_date, currency: draft.currency || 'MKD' }));
+      setMode('manual');
+    } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
+  }
+
+  async function save() {
+    setBusy(true); setErr('');
+    try {
+      await api.post('/amortization', {
+        vehicle_id: Number(vehicleId), company_id: Number(f.company_id),
+        total_amount: Number(f.total_amount), down_payment: Number(f.down_payment || 0),
+        monthly_amount: Number(f.monthly_amount), months_total: Number(f.months_total),
+        interest_rate: f.interest_rate === '' ? null : Number(f.interest_rate),
+        start_date: f.start_date, currency: f.currency, generate_invoices: f.generate_invoices,
+      });
+      onSaved();
+    } catch (ex) { setErr(ex.message); setBusy(false); }
+  }
+
+  return (
+    <Modal title="Amortization Plan" onClose={onClose} wide
+      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy || !f.company_id || !f.monthly_amount} onClick={save}>Create plan + generate installments</button></>}>
+      {err && <div className="error-msg">{err}</div>}
+      <div className="seg" style={{ marginBottom: 14 }}>
+        <button type="button" className={mode === 'manual' ? 'on' : ''} onClick={() => setMode('manual')}>Manual</button>
+        <button type="button" className={mode === 'scan' ? 'on' : ''} onClick={() => setMode('scan')}>📷 Scan Document</button>
+      </div>
+      {mode === 'scan' ? (
+        <>
+          <p className="muted">Upload a photo/PDF of the lease schedule. Gemini extracts the numbers (Cyrillic supported) and pre-fills the form for review — nothing saves until you confirm.</p>
+          <input type="file" accept="image/*,application/pdf" onChange={onScan} />
+          {busy && <Spinner />}
+        </>
+      ) : (
+        <>
+          <Field label="Leasing company"><select className="select" value={f.company_id} onChange={set('company_id')}><option value="">Select…</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+          <div className="row2">
+            <Field label="Total amount"><input className="input" type="number" value={f.total_amount} onChange={set('total_amount')} /></Field>
+            <Field label="Currency"><CurrencyToggle value={f.currency} onChange={(c) => setF({ ...f, currency: c })} /></Field>
+          </div>
+          <div className="row2">
+            <Field label="Down payment"><input className="input" type="number" value={f.down_payment} onChange={set('down_payment')} /></Field>
+            <Field label="Monthly installment"><input className="input" type="number" value={f.monthly_amount} onChange={set('monthly_amount')} /></Field>
+          </div>
+          <div className="row2">
+            <Field label="Months total"><input className="input" type="number" value={f.months_total} onChange={set('months_total')} /></Field>
+            <Field label="Interest rate %"><input className="input" type="number" value={f.interest_rate} onChange={set('interest_rate')} /></Field>
+          </div>
+          <Field label="Start date"><input className="input" type="date" value={f.start_date} onChange={set('start_date')} /></Field>
+          <Field><label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={f.generate_invoices} onChange={(e) => setF({ ...f, generate_invoices: e.target.checked })} /> Auto-generate monthly installment invoices</label></Field>
+        </>
+      )}
+    </Modal>
   );
 }
 

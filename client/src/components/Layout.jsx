@@ -14,6 +14,7 @@ const NAV = [
   ['/payments', 'Payments', '💸'],
   ['/recurring', 'Recurring', '🔁'],
   ['/daily-income', 'Daily Income', '💵'],
+  ['/calendar', 'Calendar', '📅'],
   ['/reports', 'Reports', '📊'],
   ['/settings', 'Settings', '⚙️'],
 ];
@@ -27,6 +28,7 @@ export default function Layout({ children }) {
   const [reminders, setReminders] = useState({ count: 0, items: [] });
   const [q, setQ] = useState('');
   const [results, setResults] = useState(null);
+  const [fabOpen, setFabOpen] = useState(false);
   const searchRef = useRef();
 
   useEffect(() => {
@@ -126,6 +128,17 @@ export default function Layout({ children }) {
 
         <main className="content">{children}</main>
       </div>
+
+      {/* Floating quick-add */}
+      {fabOpen && (
+        <div className="tenant-menu" style={{ position: 'fixed', right: 26, bottom: 90, zIndex: 41 }} onClick={(e) => e.stopPropagation()}>
+          <div className="row" onClick={() => { setFabOpen(false); nav('/invoices'); }}>➕ Add Expense</div>
+          <div className="row" onClick={() => { setFabOpen(false); nav('/invoices'); }}>📷 Scan Invoice</div>
+          <div className="row" onClick={() => { setFabOpen(false); nav('/daily-income'); }}>💵 Add Daily Income</div>
+          <div className="row" onClick={() => { setFabOpen(false); nav('/invoice-manager'); }}>📑 Create Client Invoice</div>
+        </div>
+      )}
+      <button className="fab" onClick={() => setFabOpen((v) => !v)} title="Quick add">{fabOpen ? '×' : '+'}</button>
     </div>
   );
 }

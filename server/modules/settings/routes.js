@@ -5,6 +5,7 @@ import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';
 import { encrypt } from '../../shared/crypto.js';
 import { testConnection } from '../../services/geminiService.js';
+import { runBackup, lastBackup } from '../../services/backupService.js';
 
 const router = Router();
 
@@ -45,6 +46,21 @@ router.post(
   requireMinRole('admin'),
   asyncHandler(async (req, res) => {
     res.json(await testConnection(req.tenantId));
+  }),
+);
+
+// Backup status + manual "Backup Now"
+router.get(
+  '/backup/status',
+  asyncHandler(async (_req, res) => {
+    res.json({ last: lastBackup() });
+  }),
+);
+router.post(
+  '/backup/run',
+  requireMinRole('admin'),
+  asyncHandler(async (_req, res) => {
+    res.json(await runBackup());
   }),
 );
 

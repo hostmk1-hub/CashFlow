@@ -45,10 +45,26 @@ async function request(method, path, body, isForm = false) {
   return data;
 }
 
+// Authenticated file download → triggers a browser save of the returned blob.
+async function download(path, filename) {
+  const headers = {};
+  if (auth.token) headers.Authorization = `Bearer ${auth.token}`;
+  if (auth.tenantId) headers['X-Tenant-Id'] = auth.tenantId;
+  const res = await fetch(`/api${path}`, { headers });
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export const api = {
   get: (p) => request('GET', p),
   post: (p, b) => request('POST', p, b),
   put: (p, b) => request('PUT', p, b),
   del: (p) => request('DELETE', p),
   upload: (p, formData) => request('POST', p, formData, true),
+  download,
 };

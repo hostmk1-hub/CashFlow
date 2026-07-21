@@ -15,6 +15,7 @@ import InvoiceManager from './pages/InvoiceManager.jsx';
 import Payments from './pages/Payments.jsx';
 import Recurring from './pages/Recurring.jsx';
 import DailyIncome from './pages/DailyIncome.jsx';
+import Calendar from './pages/Calendar.jsx';
 import Reports from './pages/Reports.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/payments" element={<Payments />} />
         <Route path="/recurring" element={<Recurring />} />
         <Route path="/daily-income" element={<DailyIncome />} />
+        <Route path="/calendar" element={<Calendar />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />

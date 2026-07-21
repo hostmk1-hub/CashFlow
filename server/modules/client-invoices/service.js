@@ -1,6 +1,8 @@
 import { withTransaction } from '../../shared/db.js';
 import { ApiError } from '../../shared/http.js';
 import { toMkd } from '../../shared/currency.js';
+import { generateClientInvoicePdf } from '../../services/pdfService.js';
+import { query } from '../../shared/db.js';
 import * as repo from './repository.js';
 
 export const list = (tenantId, filters) => repo.list(tenantId, filters);
@@ -35,7 +37,9 @@ export async function send(tenantId, id) {
   const ci = await getById(tenantId, id);
   if (ci.status === 'cancelled') throw new ApiError(400, 'Cannot send a cancelled invoice');
   const updated = await repo.updateStatus(tenantId, id, 'sent');
-  // PDF generation hook: a real deployment renders a PDF here (tenant letterhead,
-  // itemized amount, due date) and optionally emails it. Left as an integration point.
-  return { invoice: updated, pdfUrl: null };
+  const client = (await query(`SELECT name FROM companies WHERE id = $1`, [ci.company_id])).rows[0];
+  // Render a real PDF (tenant letterhead, itemized amount, due date, terms).
+  // Emailing it to the client's contact is the next integration point.
+  const pdfUrl = await generateClientInvoicePdf(tenantId, updated, client);
+  return { invoice: updated, pdfUrl };
 }
