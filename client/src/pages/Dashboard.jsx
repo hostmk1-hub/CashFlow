@@ -17,13 +17,28 @@ function Stat({ label, value, tone }) {
 export default function Dashboard() {
   const nav = useNavigate();
   const [d, setD] = useState(null);
+  const [alerts, setAlerts] = useState([]);
 
-  useEffect(() => { api.get('/dashboard').then(setD).catch(() => {}); }, []);
+  useEffect(() => {
+    api.get('/dashboard').then(setD).catch(() => {});
+    api.get('/notifications').then(setAlerts).catch(() => {});
+  }, []);
   if (!d) return <Spinner />;
+
+  async function resolveAlert(id) {
+    try { await api.post(`/notifications/${id}/resolve`); setAlerts((a) => a.filter((x) => x.id !== id)); } catch { /* ignore */ }
+  }
 
   return (
     <>
       <div className="page-head"><div className="page-title">Dashboard</div></div>
+
+      {alerts.map((a) => (
+        <div key={a.id} className={a.level === 'critical' ? 'error-msg' : 'preview-box'} style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span><b>{a.level === 'critical' ? '🚨' : '⚠️'} {a.title}</b>{a.message ? ` — ${a.message}` : ''}</span>
+          <button className="btn ghost sm" onClick={() => resolveAlert(a.id)}>Dismiss</button>
+        </div>
+      ))}
 
       <div className="grid stat-grid" style={{ marginBottom: 16 }}>
         <Stat label="Today's income" value={mkd(d.todayIncome)} tone="green" />

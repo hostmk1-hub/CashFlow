@@ -1,9 +1,10 @@
 # Finance · Rentonic — Deployment & Operations Guide
 
 Everything you need to **install, update, back up, and recover** the app. The
-whole stack runs in Docker: **PostgreSQL 18**, the **API** (Node/Express), and
-**Caddy** (automatic HTTPS). The host only needs Docker — Node, Caddy, Postgres,
-the recurring-invoice cron, and the nightly backup all run inside containers.
+whole stack runs in Docker: **PostgreSQL 18**, **Redis** (cache), the **API**
+(Node/Express), and **Caddy** (automatic HTTPS). The host only needs Docker —
+Node, Caddy, Postgres, Redis, the recurring-invoice cron, and the nightly
+verified backup all run inside containers.
 
 Three one-line commands cover normal operations:
 
@@ -93,6 +94,14 @@ docker compose exec api npm run restore -- list     # local + R2 backups
 
 ---
 
+### Backup verification (automatic)
+Every backup — nightly or manual — is **verified**: the API spins up a
+throwaway database, restores the dump into it with `ON_ERROR_STOP` (any SQL
+error aborts), compares row counts against the live database, then drops the
+throwaway db. Settings → Backups shows **Verified restore: ✅ passed**. If a
+backup can't be produced or fails to restore/verify, an alert is raised (see
+§9). This means you find out a backup is bad *before* you need it.
+
 ## 4. Off-site backups to Cloudflare R2 (disaster recovery)
 
 R2 is S3-compatible and free-tier friendly. With it configured, every nightly
@@ -127,17 +136,20 @@ git clone https://github.com/hostmk1-hub/cashflow.git finance && cd finance
 ./restore latest            # pulls newest dump from R2 and restores it
 ```
 
-**Everyday restore:**
+**Everyday restore (from local or R2, by name or newest):**
 ```bash
 ./restore list              # see what's available (local + R2)
-./restore latest            # restore the newest backup
-./restore finance-2026-07-21T03-00-00-000Z.sql.gz   # a specific dump
+./restore latest            # restore the newest backup (R2 if configured, else local)
+./restore finance-2026-07-21T03-00-00-000Z.sql.gz   # restore a specific dump by name
 ```
 
-`./restore` runs inside the API container (which has `psql 18` + the R2
-credentials), asks for confirmation (it **replaces** the current database), then
-`gunzip -c <dump> | psql`. Because dumps are `--clean --if-exists`, the restore
-recreates the schema and data cleanly.
+When R2 is configured, `latest` and a by-name restore pull the dump straight
+from R2 (downloading it into the container first), so you can recover even if
+the server's local disk is gone. `./restore` runs inside the API container
+(which has `psql 18` + the R2 credentials), asks for confirmation (it
+**replaces** the current database), then `gunzip -c <dump> | psql`. Because
+dumps are `--clean --if-exists`, the restore recreates the schema and data
+cleanly.
 
 > Keep your `ENCRYPTION_KEY` safe and identical across rebuilds — it decrypts
 > per-tenant secrets (e.g. Gemini keys) stored in the `settings` table. Losing it
@@ -166,7 +178,35 @@ docker compose exec postgres psql -U finance finance   # a psql shell
 
 ---
 
-## 7. Rotating secrets & keys
+## 7. Cache (Redis) & admin notifications
+
+**Redis cache.** The stack includes Redis. Read responses are cached **per
+tenant**, and any write (add/edit/delete) bumps that tenant's cache generation
+so the next read is always fresh — you never see a stale cached copy after an
+edit. It's an accelerator, not a dependency: if Redis is down or `REDIS_URL` is
+unset, the app serves live data unchanged. Responses carry an `X-Cache:
+HIT|MISS` header. Tune with `CACHE_TTL_SECONDS` (default 60).
+
+**Admin notifications.** Operational alerts (e.g. a failed or unverifiable
+backup) appear:
+- on the **Dashboard** as a dismissible banner (from `GET /api/notifications`), and
+- by **email**, if SMTP is configured.
+
+**Email (SMTP) setup** — set these in `.env` and `docker compose up -d`:
+```
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_SECURE=false          # true for port 465
+SMTP_USER=apikey-or-username
+SMTP_PASS=secret
+SMTP_FROM=Finance Rentonic <no-reply@your-domain>
+ADMIN_EMAIL=you@your-domain    # where alerts go
+```
+Test it from Settings → Backups → **Send test email** (or `POST
+/api/settings/email/test`). With SMTP unset, alerts still show on the dashboard;
+email is simply skipped.
+
+## 8. Rotating secrets & keys
 
 - **Gemini API key:** Settings → AI Integration (stored encrypted per tenant), or the global `GEMINI_API_KEY` in `.env` + `docker compose up -d`.
 - **JWT secret:** change `JWT_SECRET` in `.env` + `docker compose up -d` — this logs everyone out (existing tokens become invalid).
@@ -174,7 +214,7 @@ docker compose exec postgres psql -U finance finance   # a psql shell
 
 ---
 
-## 8. PostgreSQL 18 notes
+## 9. PostgreSQL 18 notes
 
 - The database runs on **PostgreSQL 18** and uses a PG18 feature — **VIRTUAL generated columns** (`invoices.remaining`, `client_invoices.remaining` are computed live from `amount - paid_amount`).
 - The API image ships the matching **PostgreSQL 18 client** (`pg_dump`/`psql`) so backups/restores are version-correct.
@@ -182,7 +222,7 @@ docker compose exec postgres psql -U finance finance   # a psql shell
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
@@ -191,4 +231,7 @@ docker compose exec postgres psql -U finance finance   # a psql shell
 | "no space left on device" | `docker image prune -f`; old backups auto-prune to 14; check the `api_backups` volume. |
 | Backup fails | Ensure the API image built with the PG18 client; check `docker compose exec api pg_dump --version`. |
 | R2 upload fails | Verify `R2_*` values and that the token has Object Read & Write; the local dump is still kept. |
+| Backup verification failed alert | The dump didn't restore/compare cleanly — check `docker compose logs api`; don't rely on that dump. |
+| No alert emails | Set `SMTP_*` + `ADMIN_EMAIL`; test via Settings → Send test email. Dashboard alerts work regardless. |
+| Stale data after edit | Shouldn't happen (writes invalidate the tenant cache); if Redis is misbehaving, `docker compose restart redis` or unset `REDIS_URL`. |
 | Login loops after update | `JWT_SECRET` changed — expected; log in again. |

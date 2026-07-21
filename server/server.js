@@ -9,6 +9,7 @@ import { errorHandler } from './shared/http.js';
 import { requireAuth, requireTenantAccess } from './shared/middleware/auth.js';
 import { generateDueInvoices } from './modules/recurring/service.js';
 import { runBackup } from './services/backupService.js';
+import { initCache, cacheGet, cacheSet, invalidateTenant } from './shared/cache.js';
 
 // Module routers
 import authRoutes from './modules/auth/routes.js';
@@ -26,6 +27,7 @@ import dailyIncomeRoutes from './modules/daily-income/routes.js';
 import amortizationRoutes from './modules/amortization/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import reportsRoutes from './modules/reports/routes.js';
+import notificationRoutes from './modules/notifications/routes.js';
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +56,39 @@ app.use('/api/tenants', tenantRoutes); // invites + team (mixes public accept ro
 // ── Tenant-scoped (auth + active tenant required) ─────────────
 const scoped = express.Router();
 scoped.use(requireAuth, requireTenantAccess);
+
+// Per-tenant read cache. GET responses are cached per tenant+URL; any successful
+// write (POST/PUT/DELETE) bumps the tenant's cache generation so the next read
+// is fresh — never a stale cached copy after an edit/delete. Binary responses
+// (xlsx) aren't cached because they never call res.json.
+scoped.use((req, res, next) => {
+  if (req.method === 'GET') {
+    const suffix = `${req.path}?${new URLSearchParams(req.query).toString()}`;
+    cacheGet(req.tenantId, suffix)
+      .then((hit) => {
+        if (hit !== null) {
+          res.setHeader('X-Cache', 'HIT');
+          return res.json(hit);
+        }
+        const originalJson = res.json.bind(res);
+        res.json = (body) => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            cacheSet(req.tenantId, suffix, body).catch(() => {});
+          }
+          res.setHeader('X-Cache', 'MISS');
+          return originalJson(body);
+        };
+        next();
+      })
+      .catch(() => next());
+    return;
+  }
+  // Mutations invalidate this tenant's cache once they succeed.
+  res.on('finish', () => {
+    if (res.statusCode >= 200 && res.statusCode < 300) invalidateTenant(req.tenantId).catch(() => {});
+  });
+  next();
+});
 scoped.use('/companies', companyRoutes);
 scoped.use('/vehicles', vehicleRoutes);
 scoped.use('/workers', workerRoutes);
@@ -66,6 +101,7 @@ scoped.use('/recurring', recurringRoutes);
 scoped.use('/daily-income', dailyIncomeRoutes);
 scoped.use('/amortization', amortizationRoutes);
 scoped.use('/settings', settingsRoutes);
+scoped.use('/notifications', notificationRoutes);
 scoped.use('/', reportsRoutes); // dashboard, reminders, calendar, search, reports/*
 app.use('/api', scoped);
 
@@ -73,6 +109,7 @@ app.use(errorHandler);
 
 async function start() {
   await runMigrations();
+  initCache();
 
   // Recurring engine: daily at 00:05 generate this month's due invoices.
   cron.schedule('5 0 * * *', () => {

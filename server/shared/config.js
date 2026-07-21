@@ -22,6 +22,18 @@ export const config = {
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   },
   defaultEurRate: Number(process.env.DEFAULT_EUR_RATE) || 61.8,
+  redisUrl: process.env.REDIS_URL || '',
+  cacheTtl: Number(process.env.CACHE_TTL_SECONDS) || 60,
+  // SMTP for admin notifications (optional — logs only when unset).
+  smtp: {
+    host: process.env.SMTP_HOST || '',
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || 'Finance Rentonic <no-reply@rentonic.app>',
+  },
+  adminEmail: process.env.ADMIN_EMAIL || '',
   // Cloudflare R2 (S3-compatible) off-site backup target. All optional — when
   // unset, backups stay local only.
   r2: {
@@ -39,3 +51,5 @@ export const config = {
 
 export const r2Enabled = () =>
   Boolean(config.r2.endpoint && config.r2.accessKeyId && config.r2.secretAccessKey && config.r2.bucket);
+
+export const smtpEnabled = () => Boolean(config.smtp.host && config.adminEmail);

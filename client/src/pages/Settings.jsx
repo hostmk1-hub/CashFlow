@@ -100,8 +100,13 @@ export default function Settings() {
             Last backup: <b>{backup?.last ? new Date(backup.last.at).toLocaleString() : 'never'}</b>
             {backup?.last && <div className="muted">{backup.last.file}</div>}
             <div className="muted">Off-site (R2): {backup?.r2Enabled ? '✅ enabled' : '— not configured'}</div>
+            <div className="muted">Verified restore: {backup?.verification ? (backup.verification.verified ? '✅ passed' : '❌ FAILED') : '— pending next run'}</div>
+            <div className="muted">Email alerts (SMTP): {backup?.smtpEnabled ? '✅ enabled' : '— not configured'}</div>
           </div>
-          <button className="btn ghost" disabled={!canManage} onClick={backupNow}>Backup Now (pg_dump)</button>
+          <div className="toolbar">
+            <button className="btn ghost" disabled={!canManage} onClick={backupNow}>Backup Now (pg_dump)</button>
+            <button className="btn ghost" disabled={!canManage} onClick={async () => { setMsg('Sending test email…'); try { const r = await api.post('/settings/email/test'); setMsg(r.sent ? 'Test email sent ✓' : `Email not sent: ${r.reason}`); } catch (e) { setMsg(e.message); } }}>Send test email</button>
+          </div>
           <div style={{ fontSize: 13, marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <b>Recurring engine</b>
             <div className="muted">Last run: {recurring?.lastRun ? new Date(recurring.lastRun).toLocaleDateString() : 'never'} · Next run: {recurring?.nextRun ? new Date(recurring.nextRun).toLocaleString() : '—'}</div>

@@ -3,12 +3,69 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import pg from 'pg';
 import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
-import { config, r2Enabled } from '../shared/config.js';
+import { config, r2Enabled, smtpEnabled } from '../shared/config.js';
+import { query } from '../shared/db.js';
+import { notify } from '../modules/notifications/service.js';
+import { backupSuccess, backupFailed } from './emailTemplates.js';
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKUP_DIR = path.resolve(__dirname, '../backups');
+
+// Last verification result, surfaced in the Settings backup panel.
+let lastVerify = null;
+export const lastVerification = () => lastVerify;
+
+const TABLES_TO_CHECK = ['tenants', 'users', 'companies', 'vehicles', 'workers', 'invoices', 'payments', 'client_invoices'];
+
+/**
+ * Verify a dump actually restores: create a throwaway database, restore the
+ * dump into it with ON_ERROR_STOP (any SQL error aborts), compare row counts
+ * against the live database, then drop the throwaway db. Returns pass/fail.
+ */
+export async function verifyDump(filePath) {
+  const base = new URL(config.databaseUrl);
+  const verifyName = `finance_verify_${Date.now()}`;
+  const maintUrl = new URL(config.databaseUrl); maintUrl.pathname = '/postgres';
+  const verifyUrl = new URL(config.databaseUrl); verifyUrl.pathname = '/' + verifyName;
+
+  const maint = new pg.Client({ connectionString: maintUrl.toString() });
+  const checks = [];
+  let verified = false;
+  let error = null;
+  try {
+    await maint.connect();
+    await maint.query(`DROP DATABASE IF EXISTS "${verifyName}" WITH (FORCE)`);
+    await maint.query(`CREATE DATABASE "${verifyName}"`);
+
+    // Restore — ON_ERROR_STOP=1 makes psql exit non-zero on any SQL error.
+    await execAsync(`gunzip -c "${filePath}" | psql -v ON_ERROR_STOP=1 "${verifyUrl.toString()}"`, {
+      maxBuffer: 1024 * 1024 * 256,
+    });
+
+    const ver = new pg.Client({ connectionString: verifyUrl.toString() });
+    await ver.connect();
+    for (const t of TABLES_TO_CHECK) {
+      const live = Number((await query(`SELECT count(*)::int c FROM ${t}`)).rows[0].c);
+      const restored = Number((await ver.query(`SELECT count(*)::int c FROM ${t}`)).rows[0].c);
+      // Tolerate small drift between the dump snapshot and "now" (± 5%, min 1).
+      const ok = Math.abs(restored - live) <= Math.max(1, Math.floor(live * 0.05));
+      checks.push({ table: t, live, restored, ok });
+    }
+    await ver.end();
+    verified = checks.every((c) => c.ok);
+    if (!verified) error = 'row-count mismatch: ' + JSON.stringify(checks.filter((c) => !c.ok));
+  } catch (e) {
+    error = e.message;
+  } finally {
+    try { await maint.query(`DROP DATABASE IF EXISTS "${verifyName}" WITH (FORCE)`); } catch { /* ignore */ }
+    await maint.end().catch(() => {});
+  }
+  lastVerify = { verified, error, checks, at: new Date().toISOString() };
+  return lastVerify;
+}
 
 function r2Client() {
   return new S3Client({
@@ -37,7 +94,7 @@ async function uploadToR2(filePath) {
  * cleanly over an existing database (see scripts/restore.js). Old local dumps
  * are pruned to the most recent 14.
  */
-export async function runBackup() {
+export async function runBackup({ verifyAfter = true } = {}) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const file = path.join(BACKUP_DIR, `finance-${stamp}.sql.gz`);
@@ -60,10 +117,31 @@ export async function runBackup() {
     const dumps = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.sql.gz')).sort();
     for (const old of dumps.slice(0, -14)) fs.unlinkSync(path.join(BACKUP_DIR, old));
 
-    console.log(`[backup] wrote ${path.basename(file)}${r2Key ? ' (+R2)' : ''}`);
-    return { ok: true, file: path.basename(file), r2: r2Key, r2Enabled: r2Enabled() };
+    // Verify the dump actually restores + matches the live DB.
+    let verify = null;
+    if (verifyAfter) {
+      verify = await verifyDump(file);
+      if (!verify.verified) {
+        await notify({
+          level: 'critical',
+          title: 'Backup verification FAILED',
+          message: `Dump ${path.basename(file)} did not verify: ${verify.error || 'unknown'}`,
+          context: { file: path.basename(file), checks: verify.checks },
+          email: smtpEnabled() ? backupFailed({ stage: 'verification', error: verify.error, file: path.basename(file) }) : null,
+        });
+      }
+    }
+
+    console.log(`[backup] wrote ${path.basename(file)}${r2Key ? ' (+R2)' : ''}${verify ? (verify.verified ? ' (verified ✓)' : ' (VERIFY FAILED)') : ''}`);
+    return { ok: true, file: path.basename(file), r2: r2Key, r2Enabled: r2Enabled(), verified: verify?.verified ?? null, checks: verify?.checks };
   } catch (err) {
     console.error('[backup] failed', err.message);
+    await notify({
+      level: 'critical',
+      title: 'Database backup FAILED',
+      message: err.message,
+      email: smtpEnabled() ? backupFailed({ stage: 'dump', error: err.message }) : null,
+    });
     return { ok: false, error: err.message };
   }
 }

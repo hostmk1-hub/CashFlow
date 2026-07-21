@@ -261,6 +261,18 @@ CREATE TABLE IF NOT EXISTS settings (
   UNIQUE (tenant_id, key)
 );
 
+-- ===== System notifications (platform-level admin alerts, e.g. backup health) =====
+CREATE TABLE IF NOT EXISTS system_notifications (
+  id         SERIAL PRIMARY KEY,
+  level      VARCHAR(20) NOT NULL DEFAULT 'info',  -- info | warning | critical
+  title      VARCHAR(200) NOT NULL,
+  message    TEXT,
+  context    JSONB,
+  resolved   BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sysnotif_open ON system_notifications (resolved, created_at DESC);
+
 -- ===== PostgreSQL 18: VIRTUAL generated columns =====
 -- `remaining` is computed live from amount - paid_amount (no storage, always
 -- current). VIRTUAL generated columns are new in PostgreSQL 18. Guarded with

@@ -74,6 +74,7 @@ without a public domain.
 | Layer     | Tech |
 |-----------|------|
 | Database  | PostgreSQL 18 (UTF-8, Cyrillic-safe), tenant-scoped schema + views |
+| Cache     | Redis — per-tenant read cache, invalidated on every write |
 | Backend   | Node.js / Express — **modular monolith**, plain JS + Zod validation |
 | Frontend  | React 19 + Vite + Recharts, Inter font (full Cyrillic coverage) |
 | AI        | Gemini Vision (`gemini-2.5-flash`) — invoice + amortization scan import |

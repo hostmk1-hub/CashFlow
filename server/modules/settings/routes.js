@@ -5,8 +5,10 @@ import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';
 import { encrypt } from '../../shared/crypto.js';
 import { testConnection } from '../../services/geminiService.js';
-import { runBackup, lastBackup } from '../../services/backupService.js';
-import { r2Enabled } from '../../shared/config.js';
+import { runBackup, lastBackup, lastVerification } from '../../services/backupService.js';
+import { r2Enabled, smtpEnabled } from '../../shared/config.js';
+import { sendAdminMail } from '../../services/mailer.js';
+import { testEmail } from '../../services/emailTemplates.js';
 
 const router = Router();
 
@@ -52,7 +54,12 @@ router.post(
 router.get(
   '/backup/status',
   asyncHandler(async (_req, res) => {
-    res.json({ last: lastBackup(), r2Enabled: r2Enabled() });
+    res.json({
+      last: lastBackup(),
+      r2Enabled: r2Enabled(),
+      smtpEnabled: smtpEnabled(),
+      verification: lastVerification(),
+    });
   }),
 );
 router.post(
@@ -60,6 +67,13 @@ router.post(
   requireMinRole('admin'),
   asyncHandler(async (_req, res) => {
     res.json(await runBackup());
+  }),
+);
+router.post(
+  '/email/test',
+  requireMinRole('admin'),
+  asyncHandler(async (_req, res) => {
+    res.json(await sendAdminMail(testEmail()));
   }),
 );
 

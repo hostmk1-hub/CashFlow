@@ -105,8 +105,9 @@ fi
 
 echo
 ok "Finance.rentonic.app is up!"
-echo "   In-container automatically: PostgreSQL 18, the API (migrations on boot),"
-echo "   Caddy (auto-HTTPS), the recurring-invoice cron, and the nightly pg_dump backup."
+echo "   In-container automatically: PostgreSQL 18, Redis (cache), the API"
+echo "   (migrations on boot), Caddy (auto-HTTPS), the recurring-invoice cron, and"
+echo "   the nightly pg_dump backup (verified into a throwaway DB, R2 upload if set)."
 if [[ "${DOMAIN_IN_ENV:-localhost}" == "localhost" ]]; then
   echo "   Open:  https://localhost   (accept the local self-signed cert)"
 else
