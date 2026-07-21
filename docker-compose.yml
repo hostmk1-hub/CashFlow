@@ -3,7 +3,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-finance}
@@ -35,6 +35,10 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       DEFAULT_EUR_RATE: ${DEFAULT_EUR_RATE:-61.8}
     # Migrations run automatically on startup (schema.sql is idempotent).
+    # Persist generated invoice PDFs and nightly pg_dump backups across redeploys.
+    volumes:
+      - api_uploads:/app/uploads
+      - api_backups:/app/backups
     expose:
       - "4000"
 
@@ -59,3 +63,5 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  api_uploads:
+  api_backups:

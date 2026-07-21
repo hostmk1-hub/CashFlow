@@ -27,11 +27,16 @@ DOMAIN=finance.rentonic.app ACME_EMAIL=you@rentonic.app ./setup.sh
 
 `setup.sh` will:
 
-1. check Docker is installed,
-2. create `.env` with **freshly generated** `JWT_SECRET`, `ENCRYPTION_KEY` and DB password,
-3. `docker compose up -d --build` (Postgres + API + Caddy),
+1. **install Docker if it's missing** (official convenience script) and start the daemon,
+2. create `.env` with **freshly generated** `JWT_SECRET`, `ENCRYPTION_KEY` and DB password (prompting for `DOMAIN` / `ACME_EMAIL` if you didn't pass them),
+3. `docker compose up -d --build` (Postgres 18 + API + Caddy),
 4. wait for the API health check,
 5. optionally load demo data (`--seed`).
+
+Everything else runs **inside the stack** — Node, Caddy, PostgreSQL 18, the
+recurring-invoice cron, and the nightly `pg_dump` backup — so the host only
+needs Docker. Generated invoice PDFs and database backups persist in named
+volumes (`api_uploads`, `api_backups`) across redeploys.
 
 Then open **https://your-domain** (or **https://localhost** locally).
 
@@ -55,7 +60,7 @@ without a public domain.
 
 | Layer     | Tech |
 |-----------|------|
-| Database  | PostgreSQL 16 (UTF-8, Cyrillic-safe), tenant-scoped schema + views |
+| Database  | PostgreSQL 18 (UTF-8, Cyrillic-safe), tenant-scoped schema + views |
 | Backend   | Node.js / Express — **modular monolith**, plain JS + Zod validation |
 | Frontend  | React 19 + Vite + Recharts, Inter font (full Cyrillic coverage) |
 | AI        | Gemini Vision (`gemini-2.5-flash`) — invoice + amortization scan import |
