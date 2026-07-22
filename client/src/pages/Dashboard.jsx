@@ -88,7 +88,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid rise" style={{ animationDelay: '220ms', gridTemplateRows: 'repeat(2, 1fr)' }}>
-          <MiniStat icon={Ic.FileText} tone="warn" label="Open payables" value={mkd(d.openPayables)} onClick={() => nav('/payments')} />
+          <MiniStat icon={Ic.FileText} tone="warn" label="Open payables" value={mkd(d.openPayables)} sub={d.dueNowPayables > 0 ? `${mkd(d.dueNowPayables)} due now` : 'nothing due now'} onClick={() => nav('/payments')} />
           <MiniStat icon={Ic.FileCheck} tone="pos" label="Outstanding receivables" value={mkd(d.outstandingReceivables)} sub={d.overdueClients > 0 ? `${d.overdueClients} overdue` : null} onClick={() => nav('/invoice-manager')} />
         </div>
       </div>
@@ -116,7 +116,7 @@ export default function Dashboard() {
       </div>
 
       <div className="cols-3">
-        <ListCard title="Top companies you owe" icon={Ic.Building} rows={d.topOwed} valueKey="open_balance" onRow={(c) => nav(`/companies/${c.id}`)} />
+        <ListCard title="Top companies you owe" icon={Ic.Building} rows={d.topOwed} valueKey="open_balance" subKey="due_now" subLabel="due now" onRow={(c) => nav(`/companies/${c.id}`)} />
         <ListCard title="Clients who owe you" icon={Ic.Users} rows={d.topOwing} valueKey="outstanding_balance" onRow={(c) => nav(`/companies/${c.id}`)} />
         <div className="card pad">
           <div className="card-title"><Ic.Calendar width={16} height={16} /> Upcoming 30 days</div>
@@ -146,7 +146,7 @@ function MiniStat({ icon: Icon, tone, label, value, sub, wide, onClick }) {
   );
 }
 
-function ListCard({ title, icon: Icon, rows, valueKey, onRow }) {
+function ListCard({ title, icon: Icon, rows, valueKey, subKey, subLabel, onRow }) {
   return (
     <div className="card pad">
       <div className="card-title"><Icon width={16} height={16} /> {title}</div>
@@ -157,7 +157,10 @@ function ListCard({ title, icon: Icon, rows, valueKey, onRow }) {
             <div className="avatar" style={{ width: 26, height: 26, borderRadius: 8, fontSize: 11 }}>{c.name.slice(0, 2).toUpperCase()}</div>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
           </span>
-          <b className="tabnum">{mkd(c[valueKey])}</b>
+          <span style={{ textAlign: 'right' }}>
+            <b className="tabnum" style={{ display: 'block' }}>{mkd(c[valueKey])}</b>
+            {subKey && Number(c[subKey]) > 0 && <span className="muted tabnum" style={{ fontSize: 11 }}>{mkd(c[subKey])} {subLabel}</span>}
+          </span>
         </div>
       ))}
     </div>

@@ -30,11 +30,24 @@ function addMonths(dateStr, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// Status of one scheduled installment/invoice, given today's date. A future
+// month is 'upcoming' (not owed yet) — it becomes 'due' only when its month
+// arrives, so "due now" reflects real cash flow.
+function rowStatus(paid, monthStr) {
+  if (paid) return 'paid';
+  // Due through the END of the installment's month (so the whole current month
+  // counts as due, not just up to the exact day-of-month).
+  const due = new Date(monthStr);
+  const endOfDueMonth = new Date(due.getFullYear(), due.getMonth() + 1, 0, 23, 59, 59);
+  return endOfDueMonth <= new Date() ? 'due' : 'upcoming';
+}
+
 /**
  * Monthly installment schedule for what you owe this company: expands both
  * amortization lease installments (one invoice per month) and single-invoice
- * installment plans (count + monthly amount) into month-by-month rows, each
- * marked paid/unpaid, so you can see which month owes how much and settle it.
+ * installment plans (count + monthly amount) into month-by-month rows. Each row
+ * is 'paid', 'due' (this month or overdue and unpaid) or 'upcoming' (a future
+ * month, not owed yet) — so you see what's actually due now vs. what's coming.
  */
 export async function installments(tenantId, id) {
   const invoices = await repo.installmentInvoices(tenantId, id);
@@ -53,18 +66,21 @@ export async function installments(tenantId, id) {
         const isLast = k === count - 1;
         const amount = isLast ? round2(total - per * (count - 1)) : per;
         cumulative = round2(cumulative + amount);
+        const month = addMonths(inv.due_date, k);
+        // Paid off oldest-first: settled once paid_amount covers the running total.
+        const paid = cumulative <= paidAmt + 0.001;
         rows.push({
           invoiceId: inv.id,
           kind: 'plan-installment',
-          month: addMonths(inv.due_date, k),
+          month,
           label: `${inv.description} · ${k + 1}/${count}`,
           amount,
-          // Paid off oldest-first: this installment is settled once the invoice's
-          // paid_amount covers the running total up to and including it.
-          paid: cumulative <= paidAmt + 0.001,
+          paid,
+          status: rowStatus(paid, month),
         });
       }
     } else {
+      const paid = inv.status === 'paid';
       rows.push({
         invoiceId: inv.id,
         kind: 'invoice',
@@ -72,14 +88,24 @@ export async function installments(tenantId, id) {
         label: inv.description,
         amount: Number(inv.amount),
         remaining: Number(inv.remaining),
-        paid: inv.status === 'paid',
+        paid,
+        status: rowStatus(paid, inv.due_date),
       });
     }
   }
   rows.sort((a, b) => new Date(a.month) - new Date(b.month));
-  const totalDue = rows.filter((r) => !r.paid).reduce((s, r) => s + r.amount, 0);
-  const totalPaid = rows.filter((r) => r.paid).reduce((s, r) => s + r.amount, 0);
-  return { rows, totalDue, totalPaid, count: rows.length };
+  const sumBy = (s) => round2(rows.filter((r) => r.status === s).reduce((t, r) => t + r.amount, 0));
+  const totalDueNow = sumBy('due');       // owed right now (this month + overdue)
+  const totalUpcoming = sumBy('upcoming'); // scheduled for future months
+  const totalPaid = sumBy('paid');
+  return {
+    rows,
+    totalDueNow,
+    totalUpcoming,
+    totalPaid,
+    totalDue: round2(totalDueNow + totalUpcoming), // total still owed (back-compat)
+    count: rows.length,
+  };
 }
 
 export async function ledger(tenantId, id) {

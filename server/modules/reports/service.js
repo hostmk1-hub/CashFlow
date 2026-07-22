@@ -1,19 +1,49 @@
 import { query } from '../../shared/db.js';
 
+// Per-invoice "due now" (MKD): the portion whose scheduled date has arrived.
+//  • Plain invoice → the whole remaining, but only once its due_date is here.
+//  • Installment invoice → only the installments whose month has arrived
+//    (periods elapsed × monthly amount), minus what's already been paid,
+//    clamped to the remaining balance. Future installments aren't owed yet.
+const DUE_NOW_EXPR = `
+  CASE
+    WHEN installment_count IS NULL OR installment_count <= 1 THEN
+      CASE WHEN due_date <= CURRENT_DATE THEN (amount - paid_amount) ELSE 0 END
+    ELSE
+      GREATEST(0, LEAST(
+        amount - paid_amount,
+        LEAST(
+          installment_count,
+          CASE WHEN due_date > CURRENT_DATE THEN 0
+               ELSE (EXTRACT(YEAR FROM age(CURRENT_DATE, due_date)) * 12
+                     + EXTRACT(MONTH FROM age(CURRENT_DATE, due_date)))::int + 1 END
+        ) * COALESCE(installment_amount, amount / installment_count) - paid_amount
+      ))
+  END`;
+
 export async function dashboard(tenantId) {
   const q = (sql, params = [tenantId]) => query(sql, params).then((r) => r.rows);
 
   const [
-    payables, receivables, leaseDebt, dailyToday, monthIncome, monthExpense,
+    payables, dueNow, receivables, leaseDebt, dailyToday, monthIncome, monthExpense,
     topOwed, topOwing, overdueClients, upcoming, bestWorst, cashFlow,
   ] = await Promise.all([
     q(`SELECT COALESCE(SUM(amount - paid_amount),0) AS open_payables FROM invoices WHERE tenant_id=$1 AND status!='paid'`),
+    q(`SELECT COALESCE(SUM(${DUE_NOW_EXPR}),0) AS due_now FROM invoices WHERE tenant_id=$1 AND status!='paid'`),
     q(`SELECT COALESCE(SUM(outstanding_balance),0) AS outstanding FROM client_balances WHERE tenant_id=$1`),
     q(`SELECT COALESCE(SUM(remaining),0) AS lease_debt FROM vehicle_amortization_progress WHERE tenant_id=$1`),
     q(`SELECT COALESCE(SUM(cash_amount+card_amount),0) AS today FROM daily_income WHERE tenant_id=$1 AND income_date=CURRENT_DATE`),
     q(`SELECT COALESCE(SUM(cash_amount+card_amount),0) AS month_income FROM daily_income WHERE tenant_id=$1 AND date_trunc('month',income_date)=date_trunc('month',CURRENT_DATE)`),
     q(`SELECT COALESCE(SUM(amount),0) AS month_expense FROM invoices WHERE tenant_id=$1 AND date_trunc('month',due_date)=date_trunc('month',CURRENT_DATE)`),
-    q(`SELECT id, name, open_balance FROM company_balances WHERE tenant_id=$1 AND open_balance>0 ORDER BY open_balance DESC LIMIT 5`),
+    q(`SELECT cb.id, cb.name, cb.open_balance, COALESCE(dn.due_now, 0) AS due_now
+       FROM company_balances cb
+       LEFT JOIN (
+         SELECT company_id, SUM(${DUE_NOW_EXPR}) AS due_now
+         FROM invoices WHERE tenant_id=$1 AND status!='paid' AND company_id IS NOT NULL
+         GROUP BY company_id
+       ) dn ON dn.company_id = cb.id
+       WHERE cb.tenant_id=$1 AND cb.open_balance>0
+       ORDER BY cb.open_balance DESC LIMIT 5`),
     q(`SELECT id, name, outstanding_balance FROM client_balances WHERE tenant_id=$1 AND outstanding_balance>0 ORDER BY outstanding_balance DESC LIMIT 5`),
     q(`SELECT COUNT(*)::int AS overdue FROM client_invoices WHERE tenant_id=$1 AND status IN ('sent','partial','overdue') AND due_date < CURRENT_DATE`),
     q(`SELECT description, due_date, amount FROM invoices WHERE tenant_id=$1 AND status!='paid' AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' ORDER BY due_date LIMIT 10`),
@@ -25,6 +55,7 @@ export async function dashboard(tenantId) {
   const expense = Number(monthExpense[0].month_expense);
   return {
     openPayables: Number(payables[0].open_payables),
+    dueNowPayables: Number(dueNow[0].due_now),
     outstandingReceivables: Number(receivables[0].outstanding),
     leaseDebt: Number(leaseDebt[0].lease_debt),
     todayIncome: Number(dailyToday[0].today),

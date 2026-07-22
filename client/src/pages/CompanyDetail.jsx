@@ -72,20 +72,29 @@ export default function CompanyDetail() {
         {tab === 'invoices' && <Ledger rows={d.payables.invoices} kind="invoice" />}
         {tab === 'payments' && <Ledger rows={d.payables.payments} kind="payment" />}
         {tab === 'installments' && (
-          <table className="tbl">
-            <thead><tr><th>Month</th><th>Payment</th><th className="num">Amount</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-              {inst.rows.map((r, i) => (
-                <tr key={i} style={{ opacity: r.paid ? 0.6 : 1 }}>
-                  <td>{new Date(r.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</td>
-                  <td>{r.label}</td>
-                  <td className="num">{mkd(r.amount)}</td>
-                  <td>{r.paid ? <Badge tone="green">paid</Badge> : <Badge tone="yellow">due</Badge>}</td>
-                  <td className="num">{!r.paid && <button className="btn ghost sm" onClick={() => setPayingRow(r)}>Mark paid</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div className="grid stat-grid" style={{ marginBottom: 12 }}>
+              <div className="card stat"><div className="label">Due now</div><div className="value" style={{ color: 'var(--neg)' }}>{mkd(inst.totalDueNow || 0)}</div></div>
+              <div className="card stat"><div className="label">Upcoming</div><div className="value">{mkd(inst.totalUpcoming || 0)}</div></div>
+              <div className="card stat"><div className="label">Paid</div><div className="value" style={{ color: 'var(--pos)' }}>{mkd(inst.totalPaid || 0)}</div></div>
+            </div>
+            <table className="tbl">
+              <thead><tr><th>Month</th><th>Payment</th><th className="num">Amount</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {inst.rows.map((r, i) => (
+                  <tr key={i} style={{ opacity: r.paid ? 0.55 : r.status === 'upcoming' ? 0.8 : 1 }}>
+                    <td>{new Date(r.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</td>
+                    <td>{r.label}</td>
+                    <td className="num">{mkd(r.amount)}</td>
+                    <td>{r.status === 'paid' ? <Badge tone="green">paid</Badge>
+                      : r.status === 'upcoming' ? <Badge tone="gray">upcoming</Badge>
+                      : <Badge tone="red">due</Badge>}</td>
+                    <td className="num">{!r.paid && <button className="btn ghost sm" onClick={() => setPayingRow(r)}>{r.status === 'upcoming' ? 'Pay early' : 'Mark paid'}</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
         {tab === 'client-invoices' && <Ledger rows={d.receivables?.invoices || []} kind="invoice" />}
         {tab === 'client-payments' && <Ledger rows={d.receivables?.payments || []} kind="payment" />}
