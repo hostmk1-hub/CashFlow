@@ -51,8 +51,19 @@ export default function Settings() {
   }
   async function testGemini() {
     setMsg('Testing…');
-    try { const r = await api.post('/settings/gemini/test'); setMsg(r.ok ? `Connection OK (${r.model})` : `Failed: status ${r.status}`); }
-    catch (e) { setMsg(e.message); }
+    try {
+      const r = await api.post('/settings/gemini/test');
+      if (r.ok) { setMsg(r.message || `Connection OK (${r.model})`); loadModels(); return; }
+      // Key works but the model is wrong → offer to apply the suggested one.
+      if (r.keyValid && r.suggestedModel) {
+        setMsg(`${r.message} — applying “${r.suggestedModel}”…`);
+        await saveSetting('gemini_model', r.suggestedModel);
+        await loadModels();
+        setMsg(`Model switched to “${r.suggestedModel}”. Test again to confirm.`);
+        return;
+      }
+      setMsg(r.message || `Failed: status ${r.status}`);
+    } catch (e) { setMsg(e.message); }
   }
   async function sendInvite() {
     setMsg('');
