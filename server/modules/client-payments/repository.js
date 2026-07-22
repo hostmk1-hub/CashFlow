@@ -59,6 +59,42 @@ export function applyAllocation(client, { clientPaymentId, clientInvoiceId, amou
   ]);
 }
 
+export function lockPayment(client, tenantId, id) {
+  return client
+    .query(`SELECT * FROM client_payments WHERE tenant_id = $1 AND id = $2 FOR UPDATE`, [tenantId, id])
+    .then((r) => r.rows[0]);
+}
+
+export function allocationsForUpdate(client, paymentId) {
+  return client
+    .query(`SELECT client_invoice_id, amount FROM client_payment_allocations WHERE client_payment_id = $1`, [paymentId])
+    .then((r) => r.rows);
+}
+
+// Undo one allocation on its client invoice (subtract, recompute status).
+export function reverseAllocationOnInvoice(client, invoiceId, allocAmount) {
+  return client.query(
+    `UPDATE client_invoices
+       SET paid_amount = GREATEST(0, paid_amount - $2),
+           status = CASE
+             WHEN GREATEST(0, paid_amount - $2) <= 0.001 THEN 'sent'
+             WHEN GREATEST(0, paid_amount - $2) >= amount - 0.001 THEN 'paid'
+             ELSE 'partial' END
+     WHERE id = $1`,
+    [invoiceId, allocAmount],
+  );
+}
+
+export function deleteAllocations(client, paymentId) {
+  return client.query(`DELETE FROM client_payment_allocations WHERE client_payment_id = $1`, [paymentId]);
+}
+
+export function deletePayment(client, tenantId, id) {
+  return client
+    .query(`DELETE FROM client_payments WHERE tenant_id = $1 AND id = $2 RETURNING id`, [tenantId, id])
+    .then((r) => r.rows[0]);
+}
+
 export function list(tenantId, companyId) {
   const params = [tenantId];
   let sql = `SELECT cp.*, c.name AS company_name FROM client_payments cp

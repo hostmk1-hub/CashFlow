@@ -65,10 +65,18 @@ function EditPaymentModal({ payment, onClose, onDone }) {
       onDone();
     } catch (e) { setErr(e.message); setBusy(false); }
   }
+  async function remove() {
+    if (!confirm('Delete this payment? The invoice balance it settled will be restored.')) return;
+    setBusy(true); setErr('');
+    try { await api.del(`/payments/${payment.id}`); onDone(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  }
 
   return (
     <Modal title={`Edit payment — ${payment.company_name || payment.worker_name}`} onClose={onClose}
-      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button>
+      footer={<><button className="btn ghost" style={{ color: 'var(--neg)' }} disabled={busy} onClick={remove}>Delete</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn ghost" onClick={onClose}>Cancel</button>
         <button className="btn" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button></>}>
       {err && <div className="error-msg">{err}</div>}
       <div className="muted" style={{ marginBottom: 10, fontSize: 12 }}>Changing the amount re-applies it across the invoice(s) this payment covered ({payment.allocations?.map((a) => `#${a.invoice_id}`).join(', ') || '—'}).</div>

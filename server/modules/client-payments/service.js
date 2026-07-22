@@ -75,6 +75,18 @@ export async function create(tenantId, input) {
 
 export const list = (tenantId, companyId) => repo.list(tenantId, companyId);
 
+export async function remove(tenantId, paymentId) {
+  return withTransaction(async (client) => {
+    const payment = await repo.lockPayment(client, tenantId, paymentId);
+    if (!payment) throw new ApiError(404, 'Payment not found');
+    const allocs = await repo.allocationsForUpdate(client, paymentId);
+    for (const a of allocs) await repo.reverseAllocationOnInvoice(client, a.client_invoice_id, Number(a.amount));
+    await repo.deleteAllocations(client, paymentId);
+    await repo.deletePayment(client, tenantId, paymentId);
+    return { ok: true, id: Number(paymentId) };
+  });
+}
+
 export async function attachProof(tenantId, paymentId, file) {
   const payment = await repo.getPayment(tenantId, paymentId);
   if (!payment) throw new ApiError(404, 'Payment not found');

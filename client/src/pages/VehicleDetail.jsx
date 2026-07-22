@@ -18,6 +18,11 @@ export default function VehicleDetail() {
 
   const load = () => api.get(`/vehicles/${id}`).then(setD).catch(() => {});
   useEffect(() => { load(); api.get('/companies').then(setCompanies).catch(() => {}); }, [id]);
+  async function deleteLease(planId) {
+    if (!confirm('Delete this lease plan and its unpaid installment invoices? Paid installments must be removed first.')) return;
+    try { await api.del(`/amortization/${planId}`); load(); }
+    catch (e) { alert(e.message); }
+  }
   if (!d) return <Spinner />;
 
   const plan = d.plans[0];
@@ -53,7 +58,10 @@ export default function VehicleDetail() {
 
       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
         <div className="card pad">
-          <h3 className="card-title">Amortization</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 className="card-title" style={{ margin: 0 }}>Amortization</h3>
+            {plan && <button className="btn ghost sm" title="Delete lease plan" style={{ color: 'var(--neg)' }} onClick={() => deleteLease(plan.id)}>🗑 Delete lease</button>}
+          </div>
           {plan ? (
             <>
               <div style={{ height: 10, background: '#eef1f4', borderRadius: 6, overflow: 'hidden', margin: '10px 0' }}>

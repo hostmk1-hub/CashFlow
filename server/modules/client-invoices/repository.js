@@ -55,3 +55,30 @@ export function updateStatus(tenantId, id, status) {
     tenantId, id, status,
   ]).then((r) => r.rows[0]);
 }
+
+export function hasAllocations(tenantId, invoiceId) {
+  return query(
+    `SELECT 1 FROM client_payment_allocations cpa JOIN client_payments cp ON cp.id = cpa.client_payment_id
+     WHERE cpa.client_invoice_id = $1 AND cp.tenant_id = $2 LIMIT 1`,
+    [invoiceId, tenantId],
+  ).then((r) => r.rows.length > 0);
+}
+
+export function update(tenantId, id, d) {
+  return query(
+    `UPDATE client_invoices SET
+       company_id = $3, vehicle_id = $4, description = $5, amount = $6, currency = $7,
+       original_amount = $8, exchange_rate = $9, issue_date = $10, due_date = $11, status = $12
+     WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+    [
+      tenantId, id, d.company_id, d.vehicle_id, d.description, d.amount, d.currency,
+      d.original_amount, d.exchange_rate, d.issue_date, d.due_date, d.status,
+    ],
+  ).then((r) => r.rows[0]);
+}
+
+export function remove(tenantId, id) {
+  return query(`DELETE FROM client_invoices WHERE tenant_id = $1 AND id = $2 RETURNING id`, [
+    tenantId, id,
+  ]).then((r) => r.rows[0]);
+}

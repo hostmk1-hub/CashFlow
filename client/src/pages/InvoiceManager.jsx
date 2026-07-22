@@ -10,8 +10,14 @@ export default function InvoiceManager() {
   const [vehicles, setVehicles] = useState([]);
   const [creating, setCreating] = useState(false);
   const [recording, setRecording] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const load = () => api.get('/client-invoices').then(setRows).catch(() => setRows([]));
+  async function del(i) {
+    if (!confirm(`Delete client invoice ${i.invoice_number}? This can't be undone.`)) return;
+    try { await api.del(`/client-invoices/${i.id}`); load(); }
+    catch (e) { alert(e.message); }
+  }
   useEffect(() => {
     load();
     api.get('/companies?type=client').then((all) => setClients(all));
@@ -39,6 +45,8 @@ export default function InvoiceManager() {
                 <td className="num">
                   {i.status === 'draft' && <button className="btn ghost sm" onClick={() => api.post(`/client-invoices/${i.id}/send`).then(load)}>Send</button>}
                   {' '}<button className="btn sm" onClick={() => setRecording({ id: i.company_id, name: i.company_name })}>Record Payment</button>
+                  {' '}<button className="btn ghost sm" title="Edit invoice" onClick={() => setEditing(i)}>✎</button>
+                  {' '}<button className="btn ghost sm" title="Delete invoice" onClick={() => del(i)}>🗑</button>
                 </td>
               </tr>
             ))}</tbody>
@@ -47,25 +55,33 @@ export default function InvoiceManager() {
       )}
 
       {creating && <CreateModal clients={clients} vehicles={vehicles} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
+      {editing && <CreateModal invoice={editing} clients={clients} vehicles={vehicles} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {recording && <PayModal company={recording} receivable onClose={() => setRecording(null)} onDone={() => { setRecording(null); load(); }} />}
     </>
   );
 }
 
-function CreateModal({ clients, vehicles, onClose, onSaved }) {
-  const [f, setF] = useState({ company_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', issue_date: new Date().toISOString().slice(0, 10), due_date: new Date().toISOString().slice(0, 10) });
+function CreateModal({ invoice, clients, vehicles, onClose, onSaved }) {
+  const editing = !!invoice;
+  const [f, setF] = useState(editing
+    ? { company_id: invoice.company_id || '', vehicle_id: invoice.vehicle_id || '', description: invoice.description || '', amount: String(invoice.amount ?? ''), currency: invoice.currency || 'MKD', issue_date: String(invoice.issue_date).slice(0, 10), due_date: String(invoice.due_date).slice(0, 10) }
+    : { company_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', issue_date: new Date().toISOString().slice(0, 10), due_date: new Date().toISOString().slice(0, 10) });
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   async function save(send) {
     setErr('');
     try {
-      await api.post('/client-invoices', { ...f, company_id: Number(f.company_id), vehicle_id: f.vehicle_id || null, amount: Number(f.amount), send });
+      const body = { ...f, company_id: Number(f.company_id), vehicle_id: f.vehicle_id || null, amount: Number(f.amount) };
+      if (editing) await api.put(`/client-invoices/${invoice.id}`, body);
+      else await api.post('/client-invoices', { ...body, send });
       onSaved();
     } catch (e) { setErr(e.message); }
   }
   return (
-    <Modal title="New Client Invoice" onClose={onClose}
-      footer={<><button className="btn ghost" onClick={() => save(false)}>Save as Draft</button><button className="btn" onClick={() => save(true)}>Save & Send</button></>}>
+    <Modal title={editing ? 'Edit Client Invoice' : 'New Client Invoice'} onClose={onClose}
+      footer={editing
+        ? <><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" onClick={() => save()}>Save changes</button></>
+        : <><button className="btn ghost" onClick={() => save(false)}>Save as Draft</button><button className="btn" onClick={() => save(true)}>Save & Send</button></>}>
       {err && <div className="error-msg">{err}</div>}
       <Field label="Client"><select className="select" value={f.company_id} onChange={set('company_id')}><option value="">Select…</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
       <Field label="Vehicle (optional)"><select className="select" value={f.vehicle_id} onChange={set('vehicle_id')}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>

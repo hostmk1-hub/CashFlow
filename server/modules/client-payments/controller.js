@@ -14,6 +14,9 @@ export const create = asyncHandler(async (req, res) =>
 export const list = asyncHandler(async (req, res) =>
   res.json(await service.list(req.tenantId, req.query.company_id ? Number(req.query.company_id) : undefined)),
 );
+export const remove = asyncHandler(async (req, res) =>
+  res.json(await service.remove(req.tenantId, Number(req.params.id))),
+);
 export const uploadProof = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'Attach a proof file (photo or PDF)');
   res.json(await service.attachProof(req.tenantId, Number(req.params.id), req.file));

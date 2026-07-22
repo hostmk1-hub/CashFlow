@@ -47,6 +47,36 @@ export function allocations(tenantId, invoiceId) {
   ).then((r) => r.rows);
 }
 
+export function hasAllocations(tenantId, invoiceId) {
+  return query(
+    `SELECT 1 FROM payment_allocations pa JOIN payments p ON p.id = pa.payment_id
+     WHERE pa.invoice_id = $1 AND p.tenant_id = $2 LIMIT 1`,
+    [invoiceId, tenantId],
+  ).then((r) => r.rows.length > 0);
+}
+
+export function update(tenantId, id, d) {
+  return query(
+    `UPDATE invoices SET
+       company_id = $3, worker_id = $4, vehicle_id = $5, invoice_number = $6,
+       description = $7, amount = $8, due_date = $9, currency = $10,
+       original_amount = $11, exchange_rate = $12, category = $13,
+       installment_count = $14, installment_amount = $15, status = $16
+     WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+    [
+      tenantId, id, d.company_id, d.worker_id, d.vehicle_id, d.invoice_number,
+      d.description, d.amount, d.due_date, d.currency, d.original_amount,
+      d.exchange_rate, d.category, d.installment_count, d.installment_amount, d.status,
+    ],
+  ).then((r) => r.rows[0]);
+}
+
+export function remove(tenantId, id) {
+  return query(`DELETE FROM invoices WHERE tenant_id = $1 AND id = $2 RETURNING id`, [
+    tenantId, id,
+  ]).then((r) => r.rows[0]);
+}
+
 export function create(tenantId, d, client = null) {
   const runner = client || { query };
   return runner

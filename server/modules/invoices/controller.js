@@ -12,6 +12,12 @@ export const getById = asyncHandler(async (req, res) =>
 export const create = asyncHandler(async (req, res) =>
   res.status(201).json(await service.create(req.tenantId, createInvoiceSchema.parse(req.body))),
 );
+export const update = asyncHandler(async (req, res) =>
+  res.json(await service.update(req.tenantId, Number(req.params.id), createInvoiceSchema.parse(req.body))),
+);
+export const remove = asyncHandler(async (req, res) =>
+  res.json(await service.remove(req.tenantId, Number(req.params.id))),
+);
 export const payInvoice = asyncHandler(async (req, res) =>
   res.status(201).json(await service.payInvoice(req.tenantId, Number(req.params.id), {
     amount: req.body.amount, method: req.body.method, paidAt: req.body.paidAt,

@@ -142,6 +142,22 @@ export async function update(tenantId, paymentId, patch) {
   });
 }
 
+/**
+ * Delete a payment: reverse its allocations (restoring each invoice's
+ * paid_amount and status) inside a transaction, then remove the payment.
+ */
+export async function remove(tenantId, paymentId) {
+  return withTransaction(async (client) => {
+    const payment = await repo.lockPayment(client, tenantId, paymentId);
+    if (!payment) throw new ApiError(404, 'Payment not found');
+    const allocs = await repo.allocationsForUpdate(client, paymentId);
+    for (const a of allocs) await repo.reverseAllocationOnInvoice(client, a.invoice_id, Number(a.amount));
+    await repo.deleteAllocations(client, paymentId);
+    await repo.deletePayment(client, tenantId, paymentId);
+    return { ok: true, id: Number(paymentId) };
+  });
+}
+
 export async function attachProof(tenantId, paymentId, file) {
   const payment = await repo.getPayment(tenantId, paymentId);
   if (!payment) throw new ApiError(404, 'Payment not found');

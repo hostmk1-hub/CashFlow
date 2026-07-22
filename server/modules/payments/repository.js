@@ -98,6 +98,12 @@ export function deleteAllocations(client, paymentId) {
   return client.query(`DELETE FROM payment_allocations WHERE payment_id = $1`, [paymentId]);
 }
 
+export function deletePayment(client, tenantId, id) {
+  return client
+    .query(`DELETE FROM payments WHERE tenant_id = $1 AND id = $2 RETURNING id`, [tenantId, id])
+    .then((r) => r.rows[0]);
+}
+
 export function updatePaymentFields(client, tenantId, id, f) {
   return client
     .query(

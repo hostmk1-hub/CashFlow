@@ -20,6 +20,11 @@ export default function DailyIncome() {
     } catch (e) { setErr(e.message); }
   }
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  async function del(r) {
+    if (!confirm(`Delete the income entry for ${date(r.income_date)}?`)) return;
+    try { await api.del(`/daily-income/${r.id}`); load(); }
+    catch (e) { alert(e.message); }
+  }
 
   return (
     <>
@@ -40,13 +45,14 @@ export default function DailyIncome() {
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No entries yet.</Empty> : (
         <div className="card table-wrap">
           <table className="tbl">
-            <thead><tr><th>Date</th><th className="num">Cash</th><th className="num">Card</th><th className="num">Total</th><th>Source</th><th>Note</th></tr></thead>
+            <thead><tr><th>Date</th><th className="num">Cash</th><th className="num">Card</th><th className="num">Total</th><th>Source</th><th>Note</th><th></th></tr></thead>
             <tbody>{rows.map((r) => (
               <tr key={r.id}>
                 <td>{date(r.income_date)}</td><td className="num">{mkd(r.cash_amount)}</td><td className="num">{mkd(r.card_amount)}</td>
                 <td className="num"><b>{mkd(Number(r.cash_amount) + Number(r.card_amount))}</b></td>
                 <td><Badge tone={r.source === 'api' ? 'green' : 'gray'}>{r.source === 'api' ? 'Synced' : 'manual'}</Badge></td>
                 <td className="muted">{r.note || '—'}</td>
+                <td className="num"><button className="btn ghost sm" title="Delete entry" onClick={() => del(r)}>🗑</button></td>
               </tr>
             ))}</tbody>
           </table>

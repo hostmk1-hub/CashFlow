@@ -36,6 +36,54 @@ export async function downloadInvoice(tenantId, invoiceId) {
 }
 
 /**
+ * Edit an invoice. Recomputes the MKD amount and installment plan, and the
+ * paid/partial/open status from the (unchanged) paid_amount. The amount can't
+ * drop below what's already been paid.
+ */
+export async function update(tenantId, id, input) {
+  const existing = await repo.getById(tenantId, id);
+  if (!existing) throw new ApiError(404, 'Invoice not found');
+  const paid = Number(existing.paid_amount);
+  const money = toMkd({ amount: input.amount, currency: input.currency, exchangeRate: input.exchange_rate });
+  if (money.amount < paid - 0.001) {
+    throw new ApiError(400, `Amount can't be less than the ${round2(paid)} already paid on this invoice.`);
+  }
+  const n = Math.max(1, Math.floor(Number(input.installments) || 1));
+  const status = paid <= 0.001 ? 'open' : paid >= money.amount - 0.001 ? 'paid' : 'partial';
+  return repo.update(tenantId, id, {
+    company_id: input.company_id ?? null,
+    worker_id: input.worker_id ?? null,
+    vehicle_id: input.vehicle_id ?? null,
+    invoice_number: input.invoice_number ?? null,
+    description: input.description,
+    amount: money.amount,
+    due_date: input.due_date,
+    currency: money.currency,
+    original_amount: money.originalAmount,
+    exchange_rate: money.exchangeRate,
+    category: input.category ?? null,
+    installment_count: n > 1 ? n : null,
+    installment_amount: n > 1 ? round2(money.amount / n) : null,
+    status,
+  });
+}
+
+/**
+ * Delete an invoice — but only if nothing has been paid against it. If it has
+ * payments, the user must remove those first (so payment history is never
+ * silently orphaned).
+ */
+export async function remove(tenantId, id) {
+  const inv = await repo.getById(tenantId, id);
+  if (!inv) throw new ApiError(404, 'Invoice not found');
+  if (Number(inv.paid_amount) > 0.001 || (await repo.hasAllocations(tenantId, id))) {
+    throw new ApiError(409, 'This invoice has payments recorded against it. Delete those payments first, then delete the invoice.');
+  }
+  await repo.remove(tenantId, id);
+  return { ok: true, id: Number(id) };
+}
+
+/**
  * Pay a SPECIFIC invoice directly (bypasses FIFO): records a payment allocated
  * only to this invoice. Defaults to the full remaining amount; pass `amount`
  * (e.g. one installment) for a partial payment. Marks it paid when fully settled.

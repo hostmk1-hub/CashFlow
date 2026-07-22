@@ -34,4 +34,16 @@ router.post(
   }),
 );
 
+router.delete(
+  '/:id',
+  requireMinRole('staff'),
+  asyncHandler(async (req, res) => {
+    const { rows } = await query(
+      `DELETE FROM daily_income WHERE tenant_id = $1 AND id = $2 RETURNING id`,
+      [req.tenantId, Number(req.params.id)],
+    );
+    res.json({ ok: true, id: rows[0]?.id ?? null });
+  }),
+);
+
 export default router;

@@ -104,6 +104,34 @@ export async function create(tenantId, input) {
 }
 
 /**
+ * Delete a lease/amortization plan and its generated installment invoices —
+ * but only if none of those installments have been paid. Paid installments must
+ * have their payments removed first, so nothing is silently orphaned.
+ */
+export async function remove(tenantId, planId) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id FROM amortization_plans WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+      [tenantId, planId],
+    );
+    if (!rows[0]) throw new ApiError(404, 'Lease plan not found');
+    const paid = await client.query(
+      `SELECT 1 FROM invoices i
+       WHERE i.tenant_id = $1 AND i.amort_plan_id = $2
+         AND (i.paid_amount > 0.001 OR EXISTS (SELECT 1 FROM payment_allocations pa WHERE pa.invoice_id = i.id))
+       LIMIT 1`,
+      [tenantId, planId],
+    );
+    if (paid.rows.length) {
+      throw new ApiError(409, 'Some lease installments have payments recorded. Delete those payments first, then delete the lease plan.');
+    }
+    await client.query(`DELETE FROM invoices WHERE tenant_id = $1 AND amort_plan_id = $2`, [tenantId, planId]);
+    await client.query(`DELETE FROM amortization_plans WHERE tenant_id = $1 AND id = $2`, [tenantId, planId]);
+    return { ok: true, id: Number(planId) };
+  });
+}
+
+/**
  * Confirm a scanned draft → same as create. Draft comes from the Gemini scan.
  */
 export function confirm(tenantId, input) {

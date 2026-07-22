@@ -13,11 +13,17 @@ export default function Invoices() {
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [payingInv, setPayingInv] = useState(null);
+  const [editingInv, setEditingInv] = useState(null);
 
   const load = () => {
     const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
     api.get(`/invoices${qs ? '?' + qs : ''}`).then(setRows).catch(() => setRows([]));
   };
+  async function deleteInvoice(inv) {
+    if (!confirm(`Delete invoice "${inv.description}"? This can't be undone.`)) return;
+    try { await api.del(`/invoices/${inv.id}`); load(); }
+    catch (e) { alert(e.message); }
+  }
   useEffect(() => { load(); }, [filters]);
   useEffect(() => {
     api.get('/companies').then(setCompanies);
@@ -77,6 +83,8 @@ export default function Invoices() {
                 <td className="num" style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn ghost sm" title={i.scanned ? 'Download attached scan' : 'Download invoice PDF'} onClick={() => api.download(`/invoices/${i.id}/download`, (i.invoice_number || 'invoice-' + i.id)).catch((e) => alert(e.message))}>⭳</button>
                   {i.status !== 'paid' && <button className="btn ghost sm" style={{ marginLeft: 4 }} onClick={() => setPayingInv(i)}>Mark paid</button>}
+                  <button className="btn ghost sm" style={{ marginLeft: 4 }} title="Edit invoice" onClick={() => setEditingInv(i)}>✎</button>
+                  <button className="btn ghost sm" style={{ marginLeft: 4 }} title="Delete invoice" onClick={() => deleteInvoice(i)}>🗑</button>
                 </td>
               </tr>
             ))}</tbody>
@@ -85,6 +93,7 @@ export default function Invoices() {
       )}
 
       {adding && <AddInvoiceModal companies={companies} vehicles={vehicles} workers={workers} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
+      {editingInv && <AddInvoiceModal invoice={editingInv} companies={companies} vehicles={vehicles} workers={workers} onClose={() => setEditingInv(null)} onSaved={() => { setEditingInv(null); load(); }} />}
       {scanning && <ScanModal companies={companies} vehicles={vehicles} onClose={() => setScanning(false)} onSaved={() => { setScanning(false); load(); }} />}
       {payingInv && (
         <MarkPaidModal
@@ -102,8 +111,16 @@ export default function Invoices() {
 const INSTALLMENT_PRESETS = [1, 3, 6, 12, 24];
 const CATEGORIES = ['leasing', 'insurance', 'repairs', 'service', 'tires', 'other'];
 
-function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
-  const [f, setF] = useState({ target: 'company', company_id: '', worker_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', due_date: new Date().toISOString().slice(0, 10), installments: 1, category: '' });
+function AddInvoiceModal({ invoice, companies, vehicles, workers, onClose, onSaved }) {
+  const editing = !!invoice;
+  const [f, setF] = useState(editing
+    ? {
+        target: invoice.worker_id ? 'worker' : 'company',
+        company_id: invoice.company_id || '', worker_id: invoice.worker_id || '', vehicle_id: invoice.vehicle_id || '',
+        description: invoice.description || '', amount: String(invoice.amount ?? ''), currency: invoice.currency || 'MKD',
+        due_date: String(invoice.due_date).slice(0, 10), installments: invoice.installment_count || 1, category: invoice.category || '',
+      }
+    : { target: 'company', company_id: '', worker_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', due_date: new Date().toISOString().slice(0, 10), installments: 1, category: '' });
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
@@ -120,12 +137,13 @@ function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
         vehicle_id: f.vehicle_id || null, installments: n, category: f.category || null,
         ...(f.target === 'company' ? { company_id: Number(f.company_id) } : { worker_id: Number(f.worker_id) }),
       };
-      await api.post('/invoices', body);
+      if (editing) await api.put(`/invoices/${invoice.id}`, body);
+      else await api.post('/invoices', body);
       onSaved();
     } catch (e) { setErr(e.message); }
   }
   return (
-    <Modal title="Add Invoice" onClose={onClose}
+    <Modal title={editing ? 'Edit Invoice' : 'Add Invoice'} onClose={onClose}
       footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" onClick={save}>Save</button></>}>
       {err && <div className="error-msg">{err}</div>}
       <Field label="Type">
