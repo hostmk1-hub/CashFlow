@@ -14,6 +14,8 @@ export const createInvoiceSchema = z
     currency: currencyEnum,
     exchange_rate: z.coerce.number().positive().optional(),
     source: z.enum(['manual', 'recurring', 'amortization', 'salary', 'scanned']).default('manual'),
+    // Split the amount into N monthly installments (1 = a single invoice).
+    installments: z.coerce.number().int().min(1).max(360).default(1),
   })
   .refine((v) => v.company_id || v.worker_id, {
     message: 'Either company_id or worker_id is required',

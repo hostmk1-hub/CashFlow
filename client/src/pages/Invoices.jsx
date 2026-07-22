@@ -71,16 +71,24 @@ export default function Invoices() {
   );
 }
 
+const INSTALLMENT_PRESETS = [1, 3, 6, 12, 24];
+
 function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
-  const [f, setF] = useState({ target: 'company', company_id: '', worker_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', due_date: new Date().toISOString().slice(0, 10) });
+  const [f, setF] = useState({ target: 'company', company_id: '', worker_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', due_date: new Date().toISOString().slice(0, 10), installments: 1 });
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const n = Math.max(1, Number(f.installments) || 1);
+  const total = Number(f.amount) || 0;
+  const per = n > 1 ? Math.round((total / n) * 100) / 100 : total;
+  function monthsFrom(dateStr, k) { const d = new Date(dateStr); d.setMonth(d.getMonth() + k); return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); }
+
   async function save() {
     setErr('');
     try {
       const body = {
         description: f.description, amount: Number(f.amount), currency: f.currency, due_date: f.due_date,
-        vehicle_id: f.vehicle_id || null,
+        vehicle_id: f.vehicle_id || null, installments: n,
         ...(f.target === 'company' ? { company_id: Number(f.company_id) } : { worker_id: Number(f.worker_id) }),
       };
       await api.post('/invoices', body);
@@ -108,7 +116,24 @@ function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
         <Field label="Amount"><input className="input" type="number" value={f.amount} onChange={set('amount')} /></Field>
         <Field label="Currency"><CurrencyToggle value={f.currency} onChange={(c) => setF({ ...f, currency: c })} /></Field>
       </div>
-      <Field label="Due date"><input className="input" type="date" value={f.due_date} onChange={set('due_date')} /></Field>
+      <Field label={n > 1 ? 'First installment due' : 'Due date'}><input className="input" type="date" value={f.due_date} onChange={set('due_date')} /></Field>
+
+      <Field label="Installments">
+        <div className="seg" style={{ flexWrap: 'wrap' }}>
+          {INSTALLMENT_PRESETS.map((p) => (
+            <button type="button" key={p} className={n === p ? 'on' : ''} onClick={() => setF({ ...f, installments: p })}>{p === 1 ? 'One-time' : `${p}×`}</button>
+          ))}
+          <input className="input" type="number" min={1} max={360} style={{ width: 74 }} value={f.installments} onChange={set('installments')} title="Custom number of monthly installments" />
+        </div>
+      </Field>
+
+      {n > 1 && total > 0 && (
+        <div className="preview-box">
+          Creates <b>{n} monthly invoices</b> of <b>{new Intl.NumberFormat('mk-MK').format(per)} {f.currency === 'EUR' ? '€' : 'ден'}</b> each
+          {f.currency === 'EUR' ? ' (converted to MKD)' : ''}, due monthly from <b>{monthsFrom(f.due_date, 0)}</b> through <b>{monthsFrom(f.due_date, n - 1)}</b>.
+          <div className="muted" style={{ marginTop: 4 }}>Total {new Intl.NumberFormat('mk-MK').format(total)} {f.currency === 'EUR' ? '€' : 'ден'} · each closes via FIFO oldest-first.</div>
+        </div>
+      )}
     </Modal>
   );
 }
