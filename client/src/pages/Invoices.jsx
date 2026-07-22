@@ -190,6 +190,7 @@ function ScanModal({ companies, vehicles, onClose, onSaved }) {
     catch (ex) { setErr(ex.message); setBusy(false); }
   }
   const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
+  const inst = Math.max(1, Number(draft?.installments) || 1);
 
   return (
     <Modal title="Scan Invoice / Receipt" onClose={onClose} wide
@@ -222,6 +223,24 @@ function ScanModal({ companies, vehicles, onClose, onSaved }) {
               <option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}
             </select>
           </Field>
+          <Field label="Category">
+            <select className="select" value={draft.category || ''} onChange={set('category')}>
+              <option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+            </select>
+          </Field>
+          <Field label="Installments">
+            <div className="seg" style={{ flexWrap: 'wrap' }}>
+              {INSTALLMENT_PRESETS.map((p) => (
+                <button type="button" key={p} className={inst === p ? 'on' : ''} onClick={() => setDraft({ ...draft, installments: p })}>{p === 1 ? 'One-time' : `${p}×`}</button>
+              ))}
+              <input className="input" type="number" min={1} max={360} style={{ width: 74 }} value={draft.installments || 1} onChange={set('installments')} title="Custom number of monthly installments" />
+            </div>
+          </Field>
+          {inst > 1 && Number(draft.amount) > 0 && (
+            <div className="preview-box">
+              One invoice for the full <b>{new Intl.NumberFormat('mk-MK').format(Number(draft.amount))} {draft.currency === 'EUR' ? '€' : 'ден'}</b>, payable in <b>{inst} monthly installments</b> of about <b>{new Intl.NumberFormat('mk-MK').format(Math.round((Number(draft.amount) / inst) * 100) / 100)} {draft.currency === 'EUR' ? '€' : 'ден'}</b> each. Mark each month paid from the company’s Installments tab.
+            </div>
+          )}
         </>
       )}
     </Modal>

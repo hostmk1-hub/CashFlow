@@ -77,6 +77,8 @@ export async function confirmInvoice(tenantId, draft, fileUrl) {
     due_date: draft.date || new Date().toISOString().slice(0, 10),
     currency: draft.currency,
     exchange_rate: draft.exchange_rate,
+    installments: draft.installments,   // pay a scanned invoice over N months
+    category: draft.category || null,
     source: 'scanned',
     scanned: true,
     scan_url: draft.scan_url || fileUrl || null,

@@ -13,4 +13,7 @@ export const scannedInvoiceDraftSchema = z.object({
   detected_plate: z.string().nullish(),
   exchange_rate: z.coerce.number().positive().optional(),
   scan_url: z.string().nullish(),
+  // Optional: pay this scanned invoice over N monthly installments, and tag it.
+  installments: z.coerce.number().int().positive().max(360).optional(),
+  category: z.string().nullish(),
 });
