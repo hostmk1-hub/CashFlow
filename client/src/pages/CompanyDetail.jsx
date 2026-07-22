@@ -51,6 +51,12 @@ export default function CompanyDetail() {
         {tabs.map((t) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t.replace('-', ' ')}</button>)}
       </div>
 
+      <BalanceBar
+        {...((tab === 'client-invoices' || tab === 'client-payments')
+          ? { label: 'They owe you', total: d.receivables?.totals.total_billed || 0, paid: d.receivables?.totals.total_received || 0, remaining: d.receivables?.totals.outstanding_balance || 0 }
+          : { label: 'You owe them', total: d.payables.totals.total_invoiced, paid: d.payables.totals.total_paid, remaining: d.payables.totals.open_balance })}
+      />
+
       <div className="card table-wrap">
         {tab === 'invoices' && <Ledger rows={d.payables.invoices} kind="invoice" />}
         {tab === 'payments' && <Ledger rows={d.payables.payments} kind="payment" />}
@@ -65,6 +71,35 @@ export default function CompanyDetail() {
 
       {paying && <PayModal company={d.company} onClose={() => setPaying(false)} onDone={() => { setPaying(false); load(); }} />}
     </>
+  );
+}
+
+function BalanceBar({ label, total, paid, remaining }) {
+  const t = Number(total) || 0;
+  const p = Number(paid) || 0;
+  const pct = t > 0 ? Math.min(100, Math.round((p / t) * 100)) : 0;
+  return (
+    <div className="card pad" style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
+        <div>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>TOTAL DEBT</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }} className="tabnum">{mkd(total)}</div>
+        </div>
+        <div>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>PAID</div>
+          <div className="tone-pos tabnum" style={{ fontSize: 22, fontWeight: 700 }}>{mkd(paid)}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>REMAINING · {label}</div>
+          <div className={remaining > 0 ? 'tone-neg' : 'tone-pos'} style={{ fontSize: 26, fontWeight: 700 }}>{mkd(remaining)}</div>
+        </div>
+      </div>
+      <div className="bar"><span style={{ width: `${pct}%` }} /></div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+        <span>{pct}% settled</span>
+        <span>{mkd(paid)} of {mkd(total)}</span>
+      </div>
+    </div>
   );
 }
 

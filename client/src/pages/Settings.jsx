@@ -16,8 +16,10 @@ export default function Settings() {
   const [recurring, setRecurring] = useState(null);
   const [letterhead, setLetterhead] = useState({ company_name: '', company_address: '', company_phone: '' });
   const [rentalsystKey, setRentalsystKey] = useState('');
+  const [models, setModels] = useState(null); // { ok, models: [] }
   const canManage = ['owner', 'admin'].includes(activeTenant?.role);
   const EXPENSE_CATEGORIES = ['Leasing', 'Insurance', 'Repairs', 'Service', 'Tires', 'Other'];
+  const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
   const load = () => {
     api.get('/settings').then((s) => {
@@ -29,7 +31,11 @@ export default function Settings() {
     api.get('/recurring/status').then(setRecurring).catch(() => {});
     if (canManage) api.get(`/tenants/${activeTenant.id}/users`).then(setTeam).catch(() => {});
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadModels(); }, []);
+
+  async function loadModels() {
+    try { setModels(await api.get('/settings/gemini/models')); } catch { setModels({ ok: false, models: [] }); }
+  }
 
   async function backupNow() {
     setMsg('Running backup…');
@@ -70,7 +76,28 @@ export default function Settings() {
             <button className="btn" disabled={!canManage || !geminiKey} onClick={() => saveSetting('gemini_api_key', geminiKey)}>Update Key</button>
             <button className="btn ghost" disabled={!canManage} onClick={testGemini}>Test Connection</button>
           </div>
-          <Field label="Model" ><input className="input" defaultValue={settings.gemini_model || 'gemini-2.5-flash'} onBlur={(e) => canManage && saveSetting('gemini_model', e.target.value)} /></Field>
+          <Field label="Model (for scanning invoices & autofill)">
+            {(() => {
+              const current = settings.gemini_model || 'gemini-2.5-flash';
+              const fetched = (models?.models || []).map((m) => m.name);
+              const opts = fetched.length ? fetched : FALLBACK_MODELS;
+              const list = opts.includes(current) ? opts : [current, ...opts];
+              return (
+                <div className="toolbar">
+                  <select className="select" value={current} disabled={!canManage} onChange={(e) => saveSetting('gemini_model', e.target.value)}>
+                    {list.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <button className="btn ghost sm" onClick={loadModels} title="Fetch models available for this API key">↻</button>
+                </div>
+              );
+            })()}
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              {models == null ? 'Loading models…'
+                : models.ok ? `${models.models.length} model(s) available for your API key`
+                : models.reason === 'no-key' ? 'Add & save an API key, then ↻ to load your available models (showing common models for now).'
+                : 'Could not fetch models — showing common models. Check the key with Test Connection.'}
+            </div>
+          </Field>
         </div>
 
         <div className="card pad">

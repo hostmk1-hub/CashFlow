@@ -101,6 +101,34 @@ export async function scanAmortizationDocument(tenantId, file) {
   return callVision({ apiKey, model, prompt, file });
 }
 
+/**
+ * List the models the configured API key can actually use for scanning/autofill
+ * (those supporting generateContent — Gemini Vision-capable). Powers the model
+ * dropdown in Settings.
+ */
+export async function listModels(tenantId) {
+  const apiKey = await resolveKey(tenantId);
+  if (!apiKey) return { ok: false, reason: 'no-key', models: [] };
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${apiKey}`,
+    );
+    if (!resp.ok) return { ok: false, status: resp.status, models: [] };
+    const json = await resp.json();
+    const models = (json.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => ({
+        name: (m.name || '').replace(/^models\//, ''),
+        displayName: m.displayName || '',
+      }))
+      .filter((m) => m.name.startsWith('gemini'))
+      .sort((a, b) => b.name.localeCompare(a.name)); // newest-ish first
+    return { ok: true, models };
+  } catch (err) {
+    return { ok: false, reason: err.message, models: [] };
+  }
+}
+
 export async function testConnection(tenantId) {
   const apiKey = await resolveKey(tenantId);
   const model = await resolveModel(tenantId);

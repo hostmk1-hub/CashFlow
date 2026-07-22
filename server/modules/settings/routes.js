@@ -4,7 +4,7 @@ import { asyncHandler } from '../../shared/http.js';
 import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';
 import { encrypt } from '../../shared/crypto.js';
-import { testConnection } from '../../services/geminiService.js';
+import { testConnection, listModels } from '../../services/geminiService.js';
 import { runBackup, lastBackup, lastVerification } from '../../services/backupService.js';
 import { r2Enabled, smtpEnabled } from '../../shared/config.js';
 import { sendAdminMail } from '../../services/mailer.js';
@@ -47,6 +47,12 @@ router.post(
   requireMinRole('admin'),
   asyncHandler(async (req, res) => {
     res.json(await testConnection(req.tenantId));
+  }),
+);
+router.get(
+  '/gemini/models',
+  asyncHandler(async (req, res) => {
+    res.json(await listModels(req.tenantId));
   }),
 );
 
