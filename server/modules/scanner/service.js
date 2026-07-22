@@ -18,17 +18,62 @@ export function findPlateMatch(text, knownPlates) {
   );
 }
 
-/** Simple case-insensitive substring similarity that works on Cyrillic (UTF-16). */
+// Macedonian Cyrillic → Latin, so a company saved as "MINT" matches an invoice
+// that prints the vendor in Cyrillic ("МИНТ"). Longer digraphs would collide if
+// applied after single letters, but these are all single Cyrillic code points.
+const CYR2LAT = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', ѓ: 'gj', е: 'e', ж: 'zh', з: 'z', ѕ: 'dz',
+  и: 'i', ј: 'j', к: 'k', л: 'l', љ: 'lj', м: 'm', н: 'n', њ: 'nj', о: 'o', п: 'p',
+  р: 'r', с: 's', т: 't', ќ: 'kj', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', џ: 'dj', ш: 'sh',
+};
+function translit(s) {
+  return String(s || '').toLowerCase().replace(/[Ѐ-ӿ]/g, (ch) => CYR2LAT[ch] ?? ch);
+}
+// Lowercased, transliterated, punctuation stripped to single spaces.
+function normalizeName(s) {
+  return translit(s).replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// Legal-form / boilerplate words that shouldn't drive a company match.
+const STOP = new Set([
+  'ad', 'doo', 'dooel', 'ins', 'osiguritelno', 'brokersko', 'drustvo', 'akcionersko',
+  'skopje', 'trgovsko', 'kompanija', 'import', 'export', 'company', 'llc', 'ltd', 'dic',
+  'na', 'the', 'i', 'so', 'za', 'ce',
+]);
+function meaningfulTokens(s) {
+  return normalizeName(s).split(/\s+/).filter((t) => t.length >= 3 && !STOP.has(t));
+}
+
+/**
+ * Match a detected vendor name to a known company. Transliterates Cyrillic to
+ * Latin, then scores by: exact match, one compact name contained in the other,
+ * or shared meaningful tokens (ignoring legal-form words like АД/ДОО/Скопје).
+ * Returns the best company above a confidence floor, else null.
+ */
 function fuzzyCompanyMatch(name, companies) {
   if (!name) return null;
-  const n = name.toLowerCase().trim();
+  const dNorm = normalizeName(name);
+  const dCompact = dNorm.replace(/\s+/g, '');
+  const dTokens = new Set(meaningfulTokens(name));
   let best = null;
+  let bestScore = 0;
   for (const c of companies) {
-    const cn = c.name.toLowerCase().trim();
-    if (cn === n) return c;
-    if (cn.includes(n) || n.includes(cn)) best = best || c;
+    const cNorm = normalizeName(c.name);
+    if (!cNorm) continue;
+    const cCompact = cNorm.replace(/\s+/g, '');
+    let score = 0;
+    if (cNorm === dNorm) score = 100;
+    else {
+      if (cCompact.length >= 3 && dCompact.includes(cCompact)) score = 80;      // "mint" ⊂ detected
+      else if (dCompact.length >= 3 && cCompact.includes(dCompact)) score = 70; // detected ⊂ company
+      const shared = meaningfulTokens(c.name).filter((t) => dTokens.has(t));
+      if (shared.length) {
+        const tokenScore = 40 + shared.length * 10 + Math.max(...shared.map((t) => t.length));
+        score = Math.max(score, tokenScore);
+      }
+    }
+    if (score > bestScore) { bestScore = score; best = c; }
   }
-  return best;
+  return bestScore >= 40 ? best : null;
 }
 
 export async function scanInvoice(tenantId, file) {
