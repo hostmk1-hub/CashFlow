@@ -130,17 +130,30 @@ function ReconcileModal({ companyId, companyName, onClose }) {
           {err && <div className="error-msg">{err}</div>}
           {!report ? (
             <>
-              <p className="muted">Upload the invoice list the company sent you (CSV or Excel). We match it against our records by <b>invoice number</b> and flag anything missing or different. The file should have an invoice-number column (amount and status columns are used if present).</p>
-              <input type="file" accept=".csv,.xlsx,text/csv" onChange={onFile} />
-              {busy && <Spinner />}
+              <p className="muted">Upload the invoice list the company sent you — a <b>CSV/Excel</b> file, or a <b>photo or PDF</b> of their statement. Photos and PDFs are read by Gemini automatically. We match it against our records by <b>invoice number</b> and flag anything missing or different, and compare the grand totals (theirs vs ours).</p>
+              <input type="file" accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" onChange={onFile} />
+              {busy && <><Spinner /><span className="muted" style={{ marginLeft: 8 }}>Reading the list…</span></>}
             </>
           ) : (
             <>
+              {report.source === 'ai' && <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>📷 Read from a photo/PDF by Gemini — double-check any borderline rows.</div>}
+
               <div className="grid stat-grid" style={{ marginBottom: 14 }}>
                 <div className="card stat"><div className="label">Their list</div><div className="value">{report.uploadedCount}</div></div>
                 <div className="card stat"><div className="label">In our system</div><div className="value">{report.systemCount}</div></div>
                 <div className="card stat"><div className="label">Matched</div><div className="value" style={{ color: 'var(--pos)' }}>{report.matchedCount}</div></div>
               </div>
+
+              {report.totals && (
+                <div className="card pad" style={{ marginBottom: 14, borderLeft: `3px solid ${report.totals.match ? 'var(--pos)' : 'var(--neg)'}` }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>THEIR TOTAL</div><div style={{ fontSize: 20, fontWeight: 700 }}>{mkd(report.totals.theirTotal)}</div></div>
+                    <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>OUR TOTAL</div><div style={{ fontSize: 20, fontWeight: 700 }}>{mkd(report.totals.ourTotal)}</div></div>
+                    <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>DIFFERENCE</div><div style={{ fontSize: 20, fontWeight: 700, color: report.totals.match ? 'var(--pos)' : 'var(--neg)' }}>{report.totals.difference > 0 ? '+' : ''}{mkd(report.totals.difference)}</div></div>
+                    <Badge tone={report.totals.match ? 'green' : 'red'}>{report.totals.match ? 'Totals match ✓' : 'Totals differ'}</Badge>
+                  </div>
+                </div>
+              )}
 
               <Section title={`Missing in our system (${report.missingInSystem.length})`} tone="red" hint="On their list but not recorded here — likely invoices you haven't entered.">
                 {report.missingInSystem.map((r, i) => <div key={i} className="row-line"><b>{r.invoice_number}</b> {r.amount != null && <span className="muted">· {mkd(r.amount)}</span>} {r.status && <Badge tone="gray">{r.status}</Badge>}</div>)}

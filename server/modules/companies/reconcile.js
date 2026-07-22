@@ -5,7 +5,7 @@ import * as repo from './repository.js';
 const COL = {
   invoice: ['invoice', 'number', 'no', 'inv', 'broj', 'број', 'faktura', 'фактура', 'ref', 'документ', 'document'],
   amount: ['amount', 'total', 'sum', 'iznos', 'износ', 'value', 'вредност', 'debt', 'долг'],
-  status: ['status', 'paid', 'plateno', 'платено', 'состојба'],
+  status: ['status', 'статус', 'paid', 'plateno', 'платено', 'состојба'],
 };
 
 const norm = (s) => String(s ?? '').trim().toUpperCase().replace(/\s+/g, '');
@@ -98,6 +98,13 @@ export async function reconcile(tenantId, companyId, uploaded) {
   }
   const extraInSystem = sys.filter((inv) => inv.invoice_number && !uploadedKeys.has(norm(inv.invoice_number)));
 
+  // Grand-total comparison: their statement total vs. what we have on record.
+  const sum = (arr, pick) => arr.reduce((t, x) => t + (Number(pick(x)) || 0), 0);
+  const theirTotal = sum(uploaded, (r) => r.amount);
+  const ourTotal = sum(sys, (inv) => inv.amount);
+  const totalDifference = Number((theirTotal - ourTotal).toFixed(2));
+  const totalsMatch = Math.abs(totalDifference) <= 0.5;
+
   return {
     uploadedCount: uploaded.length,
     systemCount: sys.length,
@@ -106,5 +113,11 @@ export async function reconcile(tenantId, companyId, uploaded) {
     mismatches,
     missingInSystem,   // on their list, not in our system → possibly not recorded
     extraInSystem,     // in our system, not on their list
+    totals: {
+      theirTotal: Number(theirTotal.toFixed(2)),
+      ourTotal: Number(ourTotal.toFixed(2)),
+      difference: totalDifference,   // theirs − ours (positive = they claim more)
+      match: totalsMatch,
+    },
   };
 }

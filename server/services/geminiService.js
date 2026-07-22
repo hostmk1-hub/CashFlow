@@ -113,6 +113,35 @@ export async function scanInvoiceDocument(tenantId, file) {
   return callVision({ tenantId, model, prompt, file });
 }
 
+/**
+ * Extract a whole LIST of invoices from a supplier statement supplied as a
+ * photo (jpg/png/…) or PDF. Used by company reconciliation when the supplier
+ * sends their list as an image/PDF instead of a spreadsheet. Returns an array
+ * of { invoice_number, amount, status } for the reconcile engine.
+ */
+export async function scanInvoiceListDocument(tenantId, file) {
+  const model = await resolveModel(tenantId);
+  const prompt =
+    'You are extracting a supplier invoice statement (a list of invoices, possibly ' +
+    'many rows across one or more pages). Return ONLY JSON in the exact shape ' +
+    '{"invoices":[{"invoice_number":"...","amount":<number>,"status":"paid"|"unpaid"|null}]}. ' +
+    'Include EVERY invoice row you can read. invoice_number is the invoice/document ' +
+    'number as printed. amount is the invoice total as a plain number (no currency ' +
+    'symbol, use a dot for decimals). status: "paid" if the row is marked paid/settled ' +
+    '(платено/плат./yes/да), "unpaid" if marked open/due, otherwise null. ' +
+    'Do not invent rows and do not include summary/total lines as invoices. ' +
+    CYRILLIC_NOTE;
+  const out = await callVision({ tenantId, model, prompt, file });
+  const list = Array.isArray(out) ? out : (out.invoices || out.rows || []);
+  return list
+    .filter((r) => r && (r.invoice_number != null) && String(r.invoice_number).trim() !== '')
+    .map((r) => ({
+      invoice_number: String(r.invoice_number).trim(),
+      amount: r.amount == null || r.amount === '' ? null : Number(r.amount),
+      status: r.status != null ? String(r.status).trim() : null,
+    }));
+}
+
 export async function scanAmortizationDocument(tenantId, file) {
   const model = await resolveModel(tenantId);
   const prompt =
