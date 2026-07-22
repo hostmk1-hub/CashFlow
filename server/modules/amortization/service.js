@@ -9,12 +9,19 @@ function addMonths(dateStr, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// Accept only a real YYYY-MM-DD date; anything else (null, '', the string
+// "null", garbage) becomes NULL so it never reaches a DATE column.
+function cleanDate(s) {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+
 /**
  * Create an amortization plan and (optionally) generate one open invoice per
  * monthly installment, linked to the vehicle + leasing company. Runs in one tx.
  */
 export async function create(tenantId, input) {
   const currency = input.currency;
+  const startDate = cleanDate(input.start_date);
   // Schedule fields may be absent (lease saved with just its identity); compute
   // MKD figures only for the ones provided.
   const monthly = input.monthly_amount != null ? toMkd({ amount: input.monthly_amount, currency, exchangeRate: input.exchange_rate }) : null;
@@ -30,7 +37,7 @@ export async function create(tenantId, input) {
          months_total, interest_rate, start_date, scan_url, currency, exchange_rate, purchase_price, lease_number)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [tenantId, input.vehicle_id, input.company_id, total ? total.amount : null, down.amount,
-       monthly ? monthly.amount : null, input.months_total ?? null, input.interest_rate ?? null, input.start_date ?? null,
+       monthly ? monthly.amount : null, input.months_total ?? null, input.interest_rate ?? null, startDate,
        input.scan_url || null, currency, xr, purchase ? purchase.amount : null,
        input.lease_number || null],
     );
@@ -38,7 +45,7 @@ export async function create(tenantId, input) {
 
     const invoices = [];
     // Only generate installments when the full schedule is present.
-    if (input.generate_invoices && monthly && input.months_total && input.start_date) {
+    if (input.generate_invoices && monthly && input.months_total && startDate) {
       for (let m = 0; m < input.months_total; m++) {
         const inv = await invoiceRepo.create(
           tenantId,
@@ -48,7 +55,7 @@ export async function create(tenantId, input) {
             amort_plan_id: plan.id,
             description: `Lease installment ${m + 1}/${input.months_total}`,
             amount: monthly.amount,
-            due_date: addMonths(input.start_date, m),
+            due_date: addMonths(startDate, m),
             source: 'amortization',
             category: 'leasing',
             currency: monthly.currency,
@@ -77,7 +84,7 @@ export async function create(tenantId, input) {
           amort_plan_id: null,
           description: 'Down payment (first payment)',
           amount: down.amount,
-          due_date: input.start_date || new Date().toISOString().slice(0, 10),
+          due_date: startDate || new Date().toISOString().slice(0, 10),
           source: 'amortization',
           category: 'leasing',
           currency: down.currency,
@@ -90,7 +97,7 @@ export async function create(tenantId, input) {
         const pay = await client.query(
           `INSERT INTO payments (tenant_id, company_id, amount, method, paid_at, currency, original_amount, exchange_rate, note)
            VALUES ($1,$2,$3,'bank',$4,$5,$6,$7,'Down payment (prepaid before taking the car)') RETURNING id`,
-          [tenantId, input.company_id, down.amount, input.start_date || new Date().toISOString().slice(0, 10), down.currency, down.originalAmount, down.exchangeRate],
+          [tenantId, input.company_id, down.amount, startDate || new Date().toISOString().slice(0, 10), down.currency, down.originalAmount, down.exchangeRate],
         );
         await client.query(`INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES ($1,$2,$3)`, [pay.rows[0].id, inv.id, down.amount]);
         await client.query(`UPDATE invoices SET paid_amount = amount, status = 'paid' WHERE id = $1`, [inv.id]);
@@ -128,7 +135,7 @@ export async function update(tenantId, planId, input) {
          purchase_price = $11, lease_number = $12
        WHERE tenant_id = $1 AND id = $2 RETURNING *`,
       [tenantId, planId, input.company_id, total ? total.amount : null, monthly ? monthly.amount : null,
-       input.months_total ?? null, input.interest_rate ?? null, input.start_date ?? null, currency, xr,
+       input.months_total ?? null, input.interest_rate ?? null, cleanDate(input.start_date), currency, xr,
        purchase ? purchase.amount : null, input.lease_number || null],
     );
     // Move the generated installment invoices to the (possibly new) leasing company.

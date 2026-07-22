@@ -226,10 +226,10 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
   const [f, setF] = useState(editing
     ? {
         company_id: plan.company_id || '', lease_number: plan.lease_number || '',
-        purchase_price: plan.purchase_price ?? '', total_amount: String(plan.total_amount ?? ''),
-        down_payment: plan.down_payment ?? 0, monthly_amount: String(plan.monthly_amount ?? ''),
-        months_total: plan.months_total ?? 12, interest_rate: plan.interest_rate ?? '',
-        start_date: String(plan.start_date).slice(0, 10), currency: plan.currency || 'MKD',
+        purchase_price: plan.purchase_price ?? '', total_amount: plan.total_amount == null ? '' : String(plan.total_amount),
+        down_payment: plan.down_payment ?? 0, monthly_amount: plan.monthly_amount == null ? '' : String(plan.monthly_amount),
+        months_total: plan.months_total ?? '', interest_rate: plan.interest_rate ?? '',
+        start_date: plan.start_date ? String(plan.start_date).slice(0, 10) : '', currency: plan.currency || 'MKD',
         generate_invoices: false, down_payment_paid: false,
       }
     : { company_id: '', lease_number: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });

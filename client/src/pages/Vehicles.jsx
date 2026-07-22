@@ -139,9 +139,9 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
           setPlanId(p.id);
           setL({
             company_id: p.company_id || '', lease_number: p.lease_number || '',
-            purchase_price: p.purchase_price ?? '', monthly_amount: String(p.monthly_amount ?? ''),
-            total_amount: String(p.total_amount ?? ''), months_total: p.months_total ?? '',
-            start_date: String(p.start_date).slice(0, 10), currency: p.currency || 'MKD',
+            purchase_price: p.purchase_price ?? '', monthly_amount: p.monthly_amount == null ? '' : String(p.monthly_amount),
+            total_amount: p.total_amount == null ? '' : String(p.total_amount), months_total: p.months_total ?? '',
+            start_date: p.start_date ? String(p.start_date).slice(0, 10) : '', currency: p.currency || 'MKD',
           });
         }
       }).catch(() => {});
