@@ -7,6 +7,7 @@ import { Card } from '../components/ui/card.jsx';
 import { Button } from '../components/ui/button.jsx';
 import { Badge } from '../components/ui/badge.jsx';
 import { Input } from '../components/ui/input.jsx';
+import { Select } from '../components/ui/select.jsx';
 import { Label } from '../components/ui/label.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table.jsx';
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../components/ui/dialog.jsx';
@@ -121,20 +122,56 @@ export default function Vehicles() {
 function VehicleModal({ vehicle, onClose, onSaved }) {
   const isNew = !vehicle.id;
   const [f, setF] = useState({ plate: '', make: '', model: '', year: new Date().getFullYear(), rentalsyst_id: '', ...vehicle });
+  const [companies, setCompanies] = useState([]);
+  const [planId, setPlanId] = useState(null);
+  const [l, setL] = useState({ company_id: '', lease_number: '', purchase_price: '', monthly_amount: '', total_amount: '', months_total: '', start_date: '', currency: 'MKD' });
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const setLease = (k) => (e) => setL({ ...l, [k]: e.target.value });
+
+  useEffect(() => {
+    api.get('/companies').then(setCompanies).catch(() => {});
+    if (!isNew) {
+      api.get(`/vehicles/${vehicle.id}`).then((d) => {
+        const p = d.plans?.[0];
+        if (p) {
+          setPlanId(p.id);
+          setL({
+            company_id: p.company_id || '', lease_number: p.lease_number || '',
+            purchase_price: p.purchase_price ?? '', monthly_amount: String(p.monthly_amount ?? ''),
+            total_amount: String(p.total_amount ?? ''), months_total: p.months_total ?? '',
+            start_date: String(p.start_date).slice(0, 10), currency: p.currency || 'MKD',
+          });
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   async function save() {
-    setErr('');
+    setBusy(true); setErr('');
     try {
       const body = { plate: f.plate, make: f.make, model: f.model, year: Number(f.year), rentalsyst_id: f.rentalsyst_id || null };
-      if (isNew) await api.post('/vehicles', body); else await api.put(`/vehicles/${vehicle.id}`, body);
+      let vid = vehicle.id;
+      if (isNew) { const created = await api.post('/vehicles', body); vid = created.id; }
+      else await api.put(`/vehicles/${vehicle.id}`, body);
+
+      const leasePayload = {
+        company_id: l.company_id ? Number(l.company_id) : null, lease_number: l.lease_number || null,
+        purchase_price: l.purchase_price === '' ? null : Number(l.purchase_price),
+        monthly_amount: Number(l.monthly_amount), total_amount: Number(l.total_amount),
+        months_total: Number(l.months_total), start_date: l.start_date, currency: l.currency,
+      };
+      const leaseFilled = l.company_id && l.monthly_amount && l.total_amount && l.months_total && l.start_date;
+      if (planId) await api.put(`/amortization/${planId}`, leasePayload);
+      else if (leaseFilled) await api.post('/amortization', { ...leasePayload, vehicle_id: Number(vid), down_payment: 0, generate_invoices: true, down_payment_paid: false });
       onSaved();
-    } catch (e) { setErr(e.message); }
+    } catch (e) { setErr(e.message); setBusy(false); }
   }
   return (
-    <Dialog onOpenChange={onClose}>
+    <Dialog onOpenChange={onClose} className="max-w-xl">
       <DialogHeader title={isNew ? 'Add Vehicle' : 'Edit Vehicle'} onClose={onClose} />
-      <DialogBody className="space-y-3">
+      <DialogBody className="space-y-4">
         {err && <div className="error-msg">{err}</div>}
         <div><Label>Plate</Label><Input value={f.plate} onChange={set('plate')} placeholder="SK-1234-AB" /></div>
         <div className="grid grid-cols-2 gap-3">
@@ -145,10 +182,37 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
           <div><Label>Year</Label><Input type="number" value={f.year} onChange={set('year')} /></div>
           <div><Label>RENTALsyst ID</Label><Input value={f.rentalsyst_id || ''} onChange={set('rentalsyst_id')} /></div>
         </div>
+
+        <div className="pt-1 mt-1 border-t border-border">
+          <div className="text-sm font-semibold mt-3 mb-1">Lease details {planId ? '' : <span className="text-muted-foreground font-normal">(optional — fill to attach a lease)</span>}</div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Leasing company</Label>
+            <Select value={l.company_id} onChange={setLease('company_id')}>
+              <option value="">Select…</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </div>
+          <div><Label>Lease / contract #</Label><Input value={l.lease_number} onChange={setLease('lease_number')} placeholder="e.g. LN-2026-00123" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Car price (cash)</Label><Input type="number" value={l.purchase_price} onChange={setLease('purchase_price')} /></div>
+          <div><Label>Currency</Label>
+            <Select value={l.currency} onChange={setLease('currency')}><option value="MKD">MKD</option><option value="EUR">EUR</option></Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Monthly amount</Label><Input type="number" value={l.monthly_amount} onChange={setLease('monthly_amount')} /></div>
+          <div><Label>Lease total</Label><Input type="number" value={l.total_amount} onChange={setLease('total_amount')} /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Months</Label><Input type="number" value={l.months_total} onChange={setLease('months_total')} /></div>
+          <div><Label>Start date</Label><Input type="date" value={l.start_date} onChange={setLease('start_date')} /></div>
+        </div>
+        {planId && <div className="text-[12px] text-muted-foreground">Editing the lease moves its installments to the selected company and updates the monthly amount on unpaid installments; the term length isn’t regenerated.</div>}
       </DialogBody>
       <DialogFooter>
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button onClick={save}>Save</Button>
+        <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
       </DialogFooter>
     </Dialog>
   );
