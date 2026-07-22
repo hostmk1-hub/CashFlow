@@ -295,6 +295,14 @@ ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(1
 -- Leasing contract / account number with the leasing company.
 ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS lease_number VARCHAR(100);
 
+-- Allow a lease to be saved with just its identity (leasing company + contract
+-- number + car price) and fill in the payment schedule later — so these are no
+-- longer required. Installments are only generated once the schedule exists.
+ALTER TABLE amortization_plans ALTER COLUMN total_amount   DROP NOT NULL;
+ALTER TABLE amortization_plans ALTER COLUMN monthly_amount DROP NOT NULL;
+ALTER TABLE amortization_plans ALTER COLUMN months_total   DROP NOT NULL;
+ALTER TABLE amortization_plans ALTER COLUMN start_date     DROP NOT NULL;
+
 -- Proof of payment (receipt/slip photo or PDF), stored on R2 like scans.
 ALTER TABLE payments        ADD COLUMN IF NOT EXISTS proof_url TEXT;
 ALTER TABLE client_payments ADD COLUMN IF NOT EXISTS proof_url TEXT;

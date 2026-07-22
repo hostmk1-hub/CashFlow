@@ -78,10 +78,10 @@ export default function VehicleDetail() {
                 <div>Leasing company: <b>{plan.company_name}</b></div>
                 <div>Lease / contract #: <b>{plan.lease_number || '—'}</b></div>
                 {plan.purchase_price != null && <div>Car price (cash): <b>{mkd(plan.purchase_price)}</b></div>}
-                <div>Lease total: <b>{mkd(plan.total_amount)}</b> <EurBadge currency={plan.currency} /></div>
-                <div>Monthly: <b>{mkd(plan.monthly_amount)}</b></div>
-                <div>Lease starts: <b>{date(plan.start_date)}</b></div>
-                <div>Last month: <b>{date(addMonthsStr(plan.start_date, (plan.months_total || 1) - 1))}</b></div>
+                <div>Lease total: <b>{plan.total_amount != null ? mkd(plan.total_amount) : '—'}</b> {plan.total_amount != null && <EurBadge currency={plan.currency} />}</div>
+                <div>Monthly: <b>{plan.monthly_amount != null ? mkd(plan.monthly_amount) : '—'}</b></div>
+                <div>Lease starts: <b>{plan.start_date ? date(plan.start_date) : '—'}</b></div>
+                <div>Last month: <b>{plan.start_date && plan.months_total ? date(addMonthsStr(plan.start_date, plan.months_total - 1)) : '—'}</b></div>
                 <div>Remaining: <b>{mkd(prog?.remaining || 0)}</b></div>
                 <div>Installments left: <b>{prog?.installments_left ?? '—'}</b></div>
                 <div>Years left: <b>{prog?.years_left ?? '—'}</b></div>
@@ -194,12 +194,13 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
   async function save() {
     setBusy(true); setErr('');
     try {
+      const num = (v) => (v === '' || v == null ? null : Number(v));
       const common = {
         company_id: Number(f.company_id), lease_number: f.lease_number || null,
-        total_amount: Number(f.total_amount), purchase_price: f.purchase_price === '' ? null : Number(f.purchase_price),
-        monthly_amount: Number(f.monthly_amount), months_total: Number(f.months_total),
-        interest_rate: f.interest_rate === '' ? null : Number(f.interest_rate),
-        start_date: f.start_date, currency: f.currency,
+        total_amount: num(f.total_amount), purchase_price: num(f.purchase_price),
+        monthly_amount: num(f.monthly_amount), months_total: num(f.months_total),
+        interest_rate: num(f.interest_rate),
+        start_date: f.start_date || null, currency: f.currency,
       };
       if (editing) {
         await api.put(`/amortization/${plan.id}`, common);
@@ -215,7 +216,7 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
 
   return (
     <Modal title={editing ? 'Edit Lease Plan' : 'Amortization Plan'} onClose={onClose} wide
-      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy || !f.company_id || !f.monthly_amount} onClick={save}>{editing ? 'Save changes' : 'Create plan + generate installments'}</button></>}>
+      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy || !f.company_id} onClick={save}>{editing ? 'Save changes' : (f.monthly_amount && f.months_total ? 'Create plan + generate installments' : 'Save lease')}</button></>}>
       {err && <div className="error-msg">{err}</div>}
       {editing && <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Editing moves the installments to the selected leasing company; the monthly amount updates on installments that aren’t paid yet. Changing the term length won’t add or remove months.</div>}
       {!editing && (

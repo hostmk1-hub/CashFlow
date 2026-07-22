@@ -29,14 +29,16 @@ export const recurringSchema = z
 export const amortizationSchema = z.object({
   vehicle_id: z.coerce.number().int().positive(),
   company_id: z.coerce.number().int().positive(),
-  total_amount: z.coerce.number().positive(),
+  // Schedule fields optional — a lease can be saved with just its identity
+  // (company + contract number + car price) and the schedule filled in later.
+  total_amount: z.coerce.number().positive().nullish(),
   purchase_price: z.coerce.number().min(0).nullish(), // car's real cash price
   lease_number: z.string().max(100).nullish(),        // leasing contract number
   down_payment: z.coerce.number().min(0).default(0),
-  monthly_amount: z.coerce.number().positive(),
-  months_total: z.coerce.number().int().positive(),
+  monthly_amount: z.coerce.number().positive().nullish(),
+  months_total: z.coerce.number().int().positive().nullish(),
   interest_rate: z.coerce.number().min(0).nullish(),
-  start_date: z.string().min(1),
+  start_date: z.string().min(1).nullish(),
   currency: currencyEnum,
   exchange_rate: z.coerce.number().positive().optional(),
   scan_url: z.string().nullish(),
@@ -49,13 +51,13 @@ export const amortizationSchema = z.object({
 // the down payment / invoice generation aren't re-run.
 export const updateAmortizationSchema = z.object({
   company_id: z.coerce.number().int().positive(),
-  total_amount: z.coerce.number().positive(),
+  total_amount: z.coerce.number().positive().nullish(),
   purchase_price: z.coerce.number().min(0).nullish(),
   lease_number: z.string().max(100).nullish(),
-  monthly_amount: z.coerce.number().positive(),
-  months_total: z.coerce.number().int().positive(),
+  monthly_amount: z.coerce.number().positive().nullish(),
+  months_total: z.coerce.number().int().positive().nullish(),
   interest_rate: z.coerce.number().min(0).nullish(),
-  start_date: z.string().min(1),
+  start_date: z.string().min(1).nullish(),
   currency: currencyEnum,
   exchange_rate: z.coerce.number().positive().optional(),
 });

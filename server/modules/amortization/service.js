@@ -14,16 +14,14 @@ function addMonths(dateStr, n) {
  * monthly installment, linked to the vehicle + leasing company. Runs in one tx.
  */
 export async function create(tenantId, input) {
-  const money = toMkd({
-    amount: input.monthly_amount,
-    currency: input.currency,
-    exchangeRate: input.exchange_rate,
-  });
-  const total = toMkd({ amount: input.total_amount, currency: input.currency, exchangeRate: money.exchangeRate });
-  const down = toMkd({ amount: input.down_payment || 0, currency: input.currency, exchangeRate: money.exchangeRate });
-  const purchase = input.purchase_price
-    ? toMkd({ amount: input.purchase_price, currency: input.currency, exchangeRate: money.exchangeRate })
-    : null;
+  const currency = input.currency;
+  // Schedule fields may be absent (lease saved with just its identity); compute
+  // MKD figures only for the ones provided.
+  const monthly = input.monthly_amount != null ? toMkd({ amount: input.monthly_amount, currency, exchangeRate: input.exchange_rate }) : null;
+  const xr = monthly?.exchangeRate ?? input.exchange_rate ?? 1;
+  const total = input.total_amount != null ? toMkd({ amount: input.total_amount, currency, exchangeRate: xr }) : null;
+  const down = input.down_payment > 0 ? toMkd({ amount: input.down_payment, currency, exchangeRate: xr }) : { amount: 0, currency, originalAmount: null, exchangeRate: xr };
+  const purchase = input.purchase_price != null ? toMkd({ amount: input.purchase_price, currency, exchangeRate: xr }) : null;
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -31,15 +29,16 @@ export async function create(tenantId, input) {
         (tenant_id, vehicle_id, company_id, total_amount, down_payment, monthly_amount,
          months_total, interest_rate, start_date, scan_url, currency, exchange_rate, purchase_price, lease_number)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [tenantId, input.vehicle_id, input.company_id, total.amount, down.amount,
-       money.amount, input.months_total, input.interest_rate ?? null, input.start_date,
-       input.scan_url || null, money.currency, money.exchangeRate, purchase ? purchase.amount : null,
+      [tenantId, input.vehicle_id, input.company_id, total ? total.amount : null, down.amount,
+       monthly ? monthly.amount : null, input.months_total ?? null, input.interest_rate ?? null, input.start_date ?? null,
+       input.scan_url || null, currency, xr, purchase ? purchase.amount : null,
        input.lease_number || null],
     );
     const plan = rows[0];
 
     const invoices = [];
-    if (input.generate_invoices) {
+    // Only generate installments when the full schedule is present.
+    if (input.generate_invoices && monthly && input.months_total && input.start_date) {
       for (let m = 0; m < input.months_total; m++) {
         const inv = await invoiceRepo.create(
           tenantId,
@@ -48,13 +47,13 @@ export async function create(tenantId, input) {
             vehicle_id: input.vehicle_id,
             amort_plan_id: plan.id,
             description: `Lease installment ${m + 1}/${input.months_total}`,
-            amount: money.amount,
+            amount: monthly.amount,
             due_date: addMonths(input.start_date, m),
             source: 'amortization',
             category: 'leasing',
-            currency: money.currency,
-            original_amount: money.originalAmount,
-            exchange_rate: money.exchangeRate,
+            currency: monthly.currency,
+            original_amount: monthly.originalAmount,
+            exchange_rate: monthly.exchangeRate,
           },
           client,
         );
@@ -78,7 +77,7 @@ export async function create(tenantId, input) {
           amort_plan_id: null,
           description: 'Down payment (first payment)',
           amount: down.amount,
-          due_date: input.start_date,
+          due_date: input.start_date || new Date().toISOString().slice(0, 10),
           source: 'amortization',
           category: 'leasing',
           currency: down.currency,
@@ -91,7 +90,7 @@ export async function create(tenantId, input) {
         const pay = await client.query(
           `INSERT INTO payments (tenant_id, company_id, amount, method, paid_at, currency, original_amount, exchange_rate, note)
            VALUES ($1,$2,$3,'bank',$4,$5,$6,$7,'Down payment (prepaid before taking the car)') RETURNING id`,
-          [tenantId, input.company_id, down.amount, input.start_date, down.currency, down.originalAmount, down.exchangeRate],
+          [tenantId, input.company_id, down.amount, input.start_date || new Date().toISOString().slice(0, 10), down.currency, down.originalAmount, down.exchangeRate],
         );
         await client.query(`INSERT INTO payment_allocations (payment_id, invoice_id, amount) VALUES ($1,$2,$3)`, [pay.rows[0].id, inv.id, down.amount]);
         await client.query(`UPDATE invoices SET paid_amount = amount, status = 'paid' WHERE id = $1`, [inv.id]);
@@ -111,11 +110,11 @@ export async function create(tenantId, input) {
  * length does not add/remove installments.
  */
 export async function update(tenantId, planId, input) {
-  const money = toMkd({ amount: input.monthly_amount, currency: input.currency, exchangeRate: input.exchange_rate });
-  const total = toMkd({ amount: input.total_amount, currency: input.currency, exchangeRate: money.exchangeRate });
-  const purchase = input.purchase_price
-    ? toMkd({ amount: input.purchase_price, currency: input.currency, exchangeRate: money.exchangeRate })
-    : null;
+  const currency = input.currency;
+  const monthly = input.monthly_amount != null ? toMkd({ amount: input.monthly_amount, currency, exchangeRate: input.exchange_rate }) : null;
+  const xr = monthly?.exchangeRate ?? input.exchange_rate ?? 1;
+  const total = input.total_amount != null ? toMkd({ amount: input.total_amount, currency, exchangeRate: xr }) : null;
+  const purchase = input.purchase_price != null ? toMkd({ amount: input.purchase_price, currency, exchangeRate: xr }) : null;
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT id FROM amortization_plans WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
@@ -128,8 +127,8 @@ export async function update(tenantId, planId, input) {
          interest_rate = $7, start_date = $8, currency = $9, exchange_rate = $10,
          purchase_price = $11, lease_number = $12
        WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-      [tenantId, planId, input.company_id, total.amount, money.amount, input.months_total,
-       input.interest_rate ?? null, input.start_date, money.currency, money.exchangeRate,
+      [tenantId, planId, input.company_id, total ? total.amount : null, monthly ? monthly.amount : null,
+       input.months_total ?? null, input.interest_rate ?? null, input.start_date ?? null, currency, xr,
        purchase ? purchase.amount : null, input.lease_number || null],
     );
     // Move the generated installment invoices to the (possibly new) leasing company.
@@ -137,12 +136,15 @@ export async function update(tenantId, planId, input) {
       `UPDATE invoices SET company_id = $3 WHERE tenant_id = $1 AND amort_plan_id = $2`,
       [tenantId, planId, input.company_id],
     );
-    // Update the monthly amount only on installments nobody has paid yet.
-    await client.query(
-      `UPDATE invoices SET amount = $3, original_amount = $4, currency = $5, exchange_rate = $6
-       WHERE tenant_id = $1 AND amort_plan_id = $2 AND paid_amount = 0`,
-      [tenantId, planId, money.amount, money.originalAmount ?? null, money.currency, money.exchangeRate],
-    );
+    // Update the monthly amount only on unpaid installments — and only when a
+    // monthly amount is actually set (never null out an invoice's amount).
+    if (monthly) {
+      await client.query(
+        `UPDATE invoices SET amount = $3, original_amount = $4, currency = $5, exchange_rate = $6
+         WHERE tenant_id = $1 AND amort_plan_id = $2 AND paid_amount = 0`,
+        [tenantId, planId, monthly.amount, monthly.originalAmount ?? null, monthly.currency, monthly.exchangeRate],
+      );
+    }
     return updated.rows[0];
   });
 }

@@ -151,20 +151,33 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
   async function save() {
     setBusy(true); setErr('');
     try {
+      const num = (v) => (v === '' || v == null ? null : Number(v));
+      // Did the user provide / is there any lease info to persist?
+      const leaseTouched = planId || l.company_id || l.lease_number || l.purchase_price ||
+        l.monthly_amount || l.total_amount || l.months_total || l.start_date;
+      // A lease record must belong to a leasing company (DB requires it).
+      if (leaseTouched && !l.company_id) throw new Error('Pick the leasing company to save the lease details.');
+
       const body = { plate: f.plate, make: f.make, model: f.model, year: Number(f.year), rentalsyst_id: f.rentalsyst_id || null };
       let vid = vehicle.id;
       if (isNew) { const created = await api.post('/vehicles', body); vid = created.id; }
       else await api.put(`/vehicles/${vehicle.id}`, body);
 
-      const leasePayload = {
-        company_id: l.company_id ? Number(l.company_id) : null, lease_number: l.lease_number || null,
-        purchase_price: l.purchase_price === '' ? null : Number(l.purchase_price),
-        monthly_amount: Number(l.monthly_amount), total_amount: Number(l.total_amount),
-        months_total: Number(l.months_total), start_date: l.start_date, currency: l.currency,
-      };
-      const leaseFilled = l.company_id && l.monthly_amount && l.total_amount && l.months_total && l.start_date;
-      if (planId) await api.put(`/amortization/${planId}`, leasePayload);
-      else if (leaseFilled) await api.post('/amortization', { ...leasePayload, vehicle_id: Number(vid), down_payment: 0, generate_invoices: true, down_payment_paid: false });
+      if (leaseTouched) {
+        const leasePayload = {
+          company_id: Number(l.company_id), lease_number: l.lease_number || null,
+          purchase_price: num(l.purchase_price), monthly_amount: num(l.monthly_amount),
+          total_amount: num(l.total_amount), months_total: num(l.months_total),
+          start_date: l.start_date || null, currency: l.currency,
+        };
+        if (planId) {
+          await api.put(`/amortization/${planId}`, leasePayload);
+        } else {
+          // Generate installments only when the full schedule was entered.
+          const canGenerate = !!(leasePayload.monthly_amount && leasePayload.months_total && leasePayload.start_date);
+          await api.post('/amortization', { ...leasePayload, vehicle_id: Number(vid), down_payment: 0, generate_invoices: canGenerate, down_payment_paid: false });
+        }
+      }
       onSaved();
     } catch (e) { setErr(e.message); setBusy(false); }
   }
