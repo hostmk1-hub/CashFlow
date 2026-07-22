@@ -1,6 +1,9 @@
-import { paymentPreviewSchema, createPaymentSchema } from './validation.js';
-import { asyncHandler } from '../../shared/http.js';
+import multer from 'multer';
+import { paymentPreviewSchema, createPaymentSchema, updatePaymentSchema } from './validation.js';
+import { asyncHandler, ApiError } from '../../shared/http.js';
 import * as service from './service.js';
+
+export const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 
 export const preview = asyncHandler(async (req, res) =>
   res.json(await service.preview(req.tenantId, paymentPreviewSchema.parse(req.body))),
@@ -14,3 +17,15 @@ export const list = asyncHandler(async (req, res) =>
     workerId: req.query.worker_id ? Number(req.query.worker_id) : undefined,
   })),
 );
+export const update = asyncHandler(async (req, res) =>
+  res.json(await service.update(req.tenantId, Number(req.params.id), updatePaymentSchema.parse(req.body))),
+);
+export const uploadProof = asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, 'Attach a proof file (photo or PDF)');
+  res.json(await service.attachProof(req.tenantId, Number(req.params.id), req.file));
+});
+export const downloadProof = asyncHandler(async (req, res) => {
+  const { buffer, filename } = await service.getProof(req.tenantId, Number(req.params.id));
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.send(buffer);
+});

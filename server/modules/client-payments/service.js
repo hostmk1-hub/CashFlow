@@ -1,6 +1,7 @@
 import { withTransaction } from '../../shared/db.js';
 import { ApiError } from '../../shared/http.js';
 import { toMkd, round2 } from '../../shared/currency.js';
+import { saveProof, readProof } from '../../services/fileStorage.js';
 import * as repo from './repository.js';
 
 function planAllocation(invoices, amountMkd) {
@@ -50,7 +51,7 @@ export async function create(tenantId, input) {
     if (!allocations.length) throw new ApiError(400, 'Payment could not be allocated');
 
     const payment = await repo.insertPayment(client, tenantId, {
-      companyId: input.companyId, method: input.method, note: input.note,
+      companyId: input.companyId, method: input.method, note: input.note, paidAt: input.paidAt,
       amount: money.amount, currency: money.currency,
       originalAmount: money.originalAmount, exchangeRate: money.exchangeRate,
     });
@@ -73,3 +74,19 @@ export async function create(tenantId, input) {
 }
 
 export const list = (tenantId, companyId) => repo.list(tenantId, companyId);
+
+export async function attachProof(tenantId, paymentId, file) {
+  const payment = await repo.getPayment(tenantId, paymentId);
+  if (!payment) throw new ApiError(404, 'Payment not found');
+  const { proof_url } = await saveProof(tenantId, file);
+  return repo.setProofUrl(tenantId, paymentId, proof_url);
+}
+
+export async function getProof(tenantId, paymentId) {
+  const payment = await repo.getPayment(tenantId, paymentId);
+  if (!payment) throw new ApiError(404, 'Payment not found');
+  if (!payment.proof_url) throw new ApiError(404, 'No proof of payment attached');
+  const file = await readProof(payment.proof_url);
+  if (!file) throw new ApiError(404, 'Proof file not found in storage');
+  return file;
+}

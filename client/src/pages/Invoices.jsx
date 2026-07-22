@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
 import { Modal, Field, Spinner, StatusBadge, EurBadge, Badge, Empty, CurrencyToggle } from '../components/ui.jsx';
+import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
 export default function Invoices() {
   const [rows, setRows] = useState(null);
@@ -11,6 +12,7 @@ export default function Invoices() {
   const [filters, setFilters] = useState({ status: '', currency: '', source: '', category: '' });
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [payingInv, setPayingInv] = useState(null);
 
   const load = () => {
     const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
@@ -22,12 +24,6 @@ export default function Invoices() {
     api.get('/vehicles').then(setVehicles);
     api.get('/workers').then(setWorkers);
   }, []);
-
-  async function markPaid(inv) {
-    if (!confirm(`Mark "${inv.description}" as fully paid (${mkd(Number(inv.amount) - Number(inv.paid_amount))} remaining)?`)) return;
-    try { await api.post(`/invoices/${inv.id}/pay`, { method: 'bank' }); load(); }
-    catch (e) { alert(e.message); }
-  }
 
   return (
     <>
@@ -80,7 +76,7 @@ export default function Invoices() {
                 <td><StatusBadge status={i.status} /></td>
                 <td className="num" style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn ghost sm" title={i.scanned ? 'Download attached scan' : 'Download invoice PDF'} onClick={() => api.download(`/invoices/${i.id}/download`, (i.invoice_number || 'invoice-' + i.id)).catch((e) => alert(e.message))}>⭳</button>
-                  {i.status !== 'paid' && <button className="btn ghost sm" style={{ marginLeft: 4 }} onClick={() => markPaid(i)}>Mark paid</button>}
+                  {i.status !== 'paid' && <button className="btn ghost sm" style={{ marginLeft: 4 }} onClick={() => setPayingInv(i)}>Mark paid</button>}
                 </td>
               </tr>
             ))}</tbody>
@@ -90,6 +86,15 @@ export default function Invoices() {
 
       {adding && <AddInvoiceModal companies={companies} vehicles={vehicles} workers={workers} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
       {scanning && <ScanModal companies={companies} vehicles={vehicles} onClose={() => setScanning(false)} onSaved={() => { setScanning(false); load(); }} />}
+      {payingInv && (
+        <MarkPaidModal
+          invoiceId={payingInv.id}
+          label={payingInv.description}
+          remaining={Number(payingInv.amount) - Number(payingInv.paid_amount)}
+          onClose={() => setPayingInv(null)}
+          onDone={() => { setPayingInv(null); load(); }}
+        />
+      )}
     </>
   );
 }

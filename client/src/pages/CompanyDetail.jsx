@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
 import { Spinner, StatusBadge, EurBadge, Badge } from '../components/ui.jsx';
 import PayModal from '../components/PayModal.jsx';
+import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
 function HeaderStat({ label, value, tone }) {
   return <div className="card stat"><div className="label">{label}</div><div className={`value ${tone || ''}`}>{value}</div></div>;
@@ -17,6 +18,7 @@ export default function CompanyDetail() {
   const [paying, setPaying] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [inst, setInst] = useState(null);
+  const [payingRow, setPayingRow] = useState(null);
 
   const load = () => {
     api.get(`/companies/${id}/ledger`).then(setD).catch(() => {});
@@ -24,13 +26,6 @@ export default function CompanyDetail() {
   };
   useEffect(() => { load(); }, [id]);
   if (!d) return <Spinner />;
-
-  async function markInstallmentPaid(row) {
-    const body = { method: 'bank' };
-    if (row.kind === 'plan-installment') body.amount = row.amount; // pay one installment
-    try { await api.post(`/invoices/${row.invoiceId}/pay`, body); load(); }
-    catch (e) { alert(e.message); }
-  }
 
   const isClient = d.company.type === 'client' || d.company.type === 'both';
   const hasInstallments = inst && inst.rows && inst.rows.length > 0;
@@ -86,7 +81,7 @@ export default function CompanyDetail() {
                   <td>{r.label}</td>
                   <td className="num">{mkd(r.amount)}</td>
                   <td>{r.paid ? <Badge tone="green">paid</Badge> : <Badge tone="yellow">due</Badge>}</td>
-                  <td className="num">{!r.paid && <button className="btn ghost sm" onClick={() => markInstallmentPaid(r)}>Mark paid</button>}</td>
+                  <td className="num">{!r.paid && <button className="btn ghost sm" onClick={() => setPayingRow(r)}>Mark paid</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -102,6 +97,15 @@ export default function CompanyDetail() {
       </div>
 
       {paying && <PayModal company={d.company} onClose={() => setPaying(false)} onDone={() => { setPaying(false); load(); }} />}
+      {payingRow && (
+        <MarkPaidModal
+          invoiceId={payingRow.invoiceId}
+          label={payingRow.label}
+          defaultAmount={payingRow.kind === 'plan-installment' ? payingRow.amount : undefined}
+          onClose={() => setPayingRow(null)}
+          onDone={() => { setPayingRow(null); load(); }}
+        />
+      )}
       {reconciling && <ReconcileModal companyId={id} companyName={d.company.name} onClose={() => setReconciling(false)} />}
     </>
   );

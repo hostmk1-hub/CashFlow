@@ -10,6 +10,8 @@ export default function PayModal({ company, worker, receivable, onClose, onDone 
   const [currency, setCurrency] = useState('MKD');
   const [rate, setRate] = useState(61.8);
   const [method, setMethod] = useState('bank');
+  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [proof, setProof] = useState(null);
   const [preview, setPreview] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,8 +34,13 @@ export default function PayModal({ company, worker, receivable, onClose, onDone 
   async function confirm() {
     setBusy(true); setErr('');
     try {
-      const body = { ...idBody, amount: Number(amount), currency, exchangeRate: rate, method };
+      const body = { ...idBody, amount: Number(amount), currency, exchangeRate: rate, method, paidAt };
       const res = await api.post(base, body);
+      // Attach proof to the freshly-created payment, if one was chosen.
+      if (proof && res?.payment?.id) {
+        const fd = new FormData(); fd.append('file', proof);
+        await api.upload(`${base}/${res.payment.id}/proof`, fd);
+      }
       onDone(res);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
@@ -54,10 +61,18 @@ export default function PayModal({ company, worker, receivable, onClose, onDone 
           <input className="input" type="number" value={rate} onChange={(e) => setRate(Number(e.target.value))} />
         </Field>
       )}
-      <Field label="Method">
-        <div className="seg">
-          {['cash', 'card', 'bank'].map((m) => <button key={m} type="button" className={method === m ? 'on' : ''} onClick={() => setMethod(m)}>{m}</button>)}
-        </div>
+      <div className="row2">
+        <Field label="Method">
+          <div className="seg">
+            {['cash', 'card', 'bank'].map((m) => <button key={m} type="button" className={method === m ? 'on' : ''} onClick={() => setMethod(m)}>{m}</button>)}
+          </div>
+        </Field>
+        <Field label="Payment date">
+          <input className="input" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Proof of payment (optional — receipt/slip photo or PDF)">
+        <input className="input" type="file" accept="image/*,.pdf,application/pdf" onChange={(e) => setProof(e.target.files[0] || null)} />
       </Field>
 
       {preview && (

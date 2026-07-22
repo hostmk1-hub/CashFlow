@@ -26,5 +26,6 @@ export const createClientPaymentSchema = clientPaymentPreviewSchema.and(
   z.object({
     method: methodEnum,
     note: z.string().nullish(),
+    paidAt: z.coerce.date().optional(),
   }),
 );

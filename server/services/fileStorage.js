@@ -7,6 +7,8 @@ import { config, r2Enabled } from '../shared/config.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCAN_DIR = path.resolve(__dirname, '../uploads/scans');
 const R2_SCAN_PREFIX = 'invoice-scans/';
+const PROOF_DIR = path.resolve(__dirname, '../uploads/proofs');
+const R2_PROOF_PREFIX = 'payment-proofs/';
 
 function r2Client() {
   return new S3Client({
@@ -64,6 +66,47 @@ export async function readScan(scanUrl) {
     }
   }
   const local = path.join(SCAN_DIR, name);
+  if (fs.existsSync(local)) return { buffer: fs.readFileSync(local), filename: name };
+  return null;
+}
+
+/**
+ * Persist a payment proof (receipt/bank slip photo or PDF). Same policy as
+ * scans: R2-only when configured, local fallback otherwise. Returns the web
+ * path stored as proof_url.
+ */
+export async function saveProof(tenantId, file) {
+  const name = `proof-${tenantId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extFor(file)}`;
+  if (r2Enabled()) {
+    await r2Client().send(
+      new PutObjectCommand({
+        Bucket: config.r2.bucket,
+        Key: R2_PROOF_PREFIX + name,
+        Body: file.buffer,
+        ContentType: file.mimetype || 'application/octet-stream',
+      }),
+    );
+    return { proof_url: `/uploads/proofs/${name}`, r2: true };
+  }
+  fs.mkdirSync(PROOF_DIR, { recursive: true });
+  fs.writeFileSync(path.join(PROOF_DIR, name), file.buffer);
+  return { proof_url: `/uploads/proofs/${name}`, r2: false };
+}
+
+/** Resolve a payment proof for download — R2 first when configured, else local. */
+export async function readProof(proofUrl) {
+  const name = path.basename(proofUrl);
+  if (r2Enabled()) {
+    try {
+      const res = await r2Client().send(new GetObjectCommand({ Bucket: config.r2.bucket, Key: R2_PROOF_PREFIX + name }));
+      const chunks = [];
+      for await (const c of res.Body) chunks.push(c);
+      return { buffer: Buffer.concat(chunks), filename: name };
+    } catch (err) {
+      console.error('[proof] R2 read failed, trying local:', err.message);
+    }
+  }
+  const local = path.join(PROOF_DIR, name);
   if (fs.existsSync(local)) return { buffer: fs.readFileSync(local), filename: name };
   return null;
 }

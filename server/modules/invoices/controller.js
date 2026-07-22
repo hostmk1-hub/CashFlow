@@ -14,7 +14,7 @@ export const create = asyncHandler(async (req, res) =>
 );
 export const payInvoice = asyncHandler(async (req, res) =>
   res.status(201).json(await service.payInvoice(req.tenantId, Number(req.params.id), {
-    amount: req.body.amount, method: req.body.method,
+    amount: req.body.amount, method: req.body.method, paidAt: req.body.paidAt,
   })),
 );
 

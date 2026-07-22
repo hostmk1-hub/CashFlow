@@ -26,12 +26,24 @@ export function insertPayment(client, tenantId, p) {
   return client
     .query(
       `INSERT INTO client_payments
-        (tenant_id, company_id, amount, method, currency, original_amount, exchange_rate, note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        (tenant_id, company_id, amount, method, currency, original_amount, exchange_rate, note, paid_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9, CURRENT_DATE)) RETURNING *`,
       [tenantId, p.companyId, p.amount, p.method, p.currency, p.originalAmount || null,
-       p.exchangeRate || 1, p.note || null],
+       p.exchangeRate || 1, p.note || null, p.paidAt || null],
     )
     .then((r) => r.rows[0]);
+}
+
+export function getPayment(tenantId, id) {
+  return query(`SELECT * FROM client_payments WHERE tenant_id = $1 AND id = $2`, [tenantId, id]).then(
+    (r) => r.rows[0],
+  );
+}
+
+export function setProofUrl(tenantId, id, proofUrl) {
+  return query(`UPDATE client_payments SET proof_url = $3 WHERE tenant_id = $1 AND id = $2 RETURNING *`, [
+    tenantId, id, proofUrl,
+  ]).then((r) => r.rows[0]);
 }
 
 export function applyAllocation(client, { clientPaymentId, clientInvoiceId, amount, newPaid, newStatus }) {

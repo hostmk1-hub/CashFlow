@@ -40,7 +40,7 @@ export async function downloadInvoice(tenantId, invoiceId) {
  * only to this invoice. Defaults to the full remaining amount; pass `amount`
  * (e.g. one installment) for a partial payment. Marks it paid when fully settled.
  */
-export async function payInvoice(tenantId, invoiceId, { amount, method = 'bank' } = {}) {
+export async function payInvoice(tenantId, invoiceId, { amount, method = 'bank', paidAt } = {}) {
   const inv = await repo.getById(tenantId, invoiceId);
   if (!inv) throw new ApiError(404, 'Invoice not found');
   const remaining = round2(Number(inv.amount) - Number(inv.paid_amount));
@@ -52,6 +52,7 @@ export async function payInvoice(tenantId, invoiceId, { amount, method = 'bank' 
     amount: payAmount,
     currency: 'MKD',
     method,
+    paidAt,
     invoiceIds: [invoiceId],
     note: 'Direct payment for this invoice',
   });

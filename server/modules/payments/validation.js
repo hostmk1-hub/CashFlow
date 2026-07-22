@@ -1,1 +1,1 @@
-export { paymentPreviewSchema, createPaymentSchema } from '../../schemas/payments.js';
+export { paymentPreviewSchema, createPaymentSchema, updatePaymentSchema } from '../../schemas/payments.js';

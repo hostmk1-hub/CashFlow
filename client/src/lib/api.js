@@ -60,11 +60,25 @@ async function download(path, filename) {
   URL.revokeObjectURL(a.href);
 }
 
+// Fetch an authenticated file and open it in a new browser tab (for viewing a
+// proof/receipt inline instead of forcing a download).
+async function openFile(path) {
+  const headers = {};
+  if (auth.token) headers.Authorization = `Bearer ${auth.token}`;
+  if (auth.tenantId) headers['X-Tenant-Id'] = auth.tenantId;
+  const res = await fetch(`/api${path}`, { headers });
+  if (!res.ok) throw new Error(`Could not open file (${res.status})`);
+  const blob = await res.blob();
+  window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+}
+
 export const api = {
   get: (p) => request('GET', p),
   post: (p, b) => request('POST', p, b),
   put: (p, b) => request('PUT', p, b),
+  patch: (p, b) => request('PATCH', p, b),
   del: (p) => request('DELETE', p),
   upload: (p, formData) => request('POST', p, formData, true),
   download,
+  openFile,
 };

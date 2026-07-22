@@ -295,6 +295,10 @@ ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(1
 -- Leasing contract / account number with the leasing company.
 ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS lease_number VARCHAR(100);
 
+-- Proof of payment (receipt/slip photo or PDF), stored on R2 like scans.
+ALTER TABLE payments        ADD COLUMN IF NOT EXISTS proof_url TEXT;
+ALTER TABLE client_payments ADD COLUMN IF NOT EXISTS proof_url TEXT;
+
 -- ===== Derived views =====
 
 CREATE OR REPLACE VIEW company_balances AS
