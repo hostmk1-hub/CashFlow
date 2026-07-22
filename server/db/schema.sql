@@ -292,6 +292,9 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS category VARCHAR(30);
 -- shown: lease total_amount - purchase_price = what the leasing company charges.
 ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(14,2);
 
+-- Leasing contract / account number with the leasing company.
+ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS lease_number VARCHAR(100);
+
 -- ===== Derived views =====
 
 CREATE OR REPLACE VIEW company_balances AS

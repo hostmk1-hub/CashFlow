@@ -4,13 +4,15 @@ export function list(tenantId, { q, activeOnly } = {}) {
   const params = [tenantId];
   let sql = `
     SELECT v.*,
-      p.monthly_amount, p.currency AS lease_currency,
+      p.monthly_amount, p.currency AS lease_currency, p.lease_number, p.start_date AS lease_start, p.months_total,
+      lc.name AS leasing_company,
       prog.remaining, prog.years_left, prog.installments_left,
       pnl.utilization_pct, pnl.rev_pav
     FROM vehicles v
     LEFT JOIN LATERAL (
       SELECT * FROM amortization_plans ap WHERE ap.vehicle_id = v.id ORDER BY ap.id DESC LIMIT 1
     ) p ON true
+    LEFT JOIN companies lc ON lc.id = p.company_id
     LEFT JOIN vehicle_amortization_progress prog ON prog.plan_id = p.id
     LEFT JOIN LATERAL (
       SELECT utilization_pct, rev_pav FROM vehicle_pnl vp

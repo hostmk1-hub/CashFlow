@@ -7,5 +7,6 @@ const router = Router();
 router.get('/', ctrl.list);
 router.get('/:id', ctrl.getById);
 router.post('/', requireMinRole('staff'), ctrl.create);
+router.post('/:id/pay', requireMinRole('manager'), ctrl.payInvoice);
 
 export default router;

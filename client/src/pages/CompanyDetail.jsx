@@ -15,13 +15,25 @@ export default function CompanyDetail() {
   const [d, setD] = useState(null);
   const [tab, setTab] = useState('invoices');
   const [paying, setPaying] = useState(false);
+  const [inst, setInst] = useState(null);
 
-  const load = () => api.get(`/companies/${id}/ledger`).then(setD).catch(() => {});
+  const load = () => {
+    api.get(`/companies/${id}/ledger`).then(setD).catch(() => {});
+    api.get(`/companies/${id}/installments`).then(setInst).catch(() => {});
+  };
   useEffect(() => { load(); }, [id]);
   if (!d) return <Spinner />;
 
+  async function markInstallmentPaid(row) {
+    const body = { method: 'bank' };
+    if (row.kind === 'plan-installment') body.amount = row.amount; // pay one installment
+    try { await api.post(`/invoices/${row.invoiceId}/pay`, body); load(); }
+    catch (e) { alert(e.message); }
+  }
+
   const isClient = d.company.type === 'client' || d.company.type === 'both';
-  const tabs = ['invoices', 'payments', ...(isClient ? ['client-invoices', 'client-payments'] : []), 'vehicles'];
+  const hasInstallments = inst && inst.rows && inst.rows.length > 0;
+  const tabs = ['invoices', 'payments', ...(hasInstallments ? ['installments'] : []), ...(isClient ? ['client-invoices', 'client-payments'] : []), 'vehicles'];
 
   return (
     <>
@@ -60,6 +72,22 @@ export default function CompanyDetail() {
       <div className="card table-wrap">
         {tab === 'invoices' && <Ledger rows={d.payables.invoices} kind="invoice" />}
         {tab === 'payments' && <Ledger rows={d.payables.payments} kind="payment" />}
+        {tab === 'installments' && (
+          <table className="tbl">
+            <thead><tr><th>Month</th><th>Payment</th><th className="num">Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {inst.rows.map((r, i) => (
+                <tr key={i} style={{ opacity: r.paid ? 0.6 : 1 }}>
+                  <td>{new Date(r.month).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</td>
+                  <td>{r.label}</td>
+                  <td className="num">{mkd(r.amount)}</td>
+                  <td>{r.paid ? <Badge tone="green">paid</Badge> : <Badge tone="yellow">due</Badge>}</td>
+                  <td className="num">{!r.paid && <button className="btn ghost sm" onClick={() => markInstallmentPaid(r)}>Mark paid</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         {tab === 'client-invoices' && <Ledger rows={d.receivables?.invoices || []} kind="invoice" />}
         {tab === 'client-payments' && <Ledger rows={d.receivables?.payments || []} kind="payment" />}
         {tab === 'vehicles' && (

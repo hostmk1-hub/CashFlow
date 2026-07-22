@@ -31,6 +31,7 @@ export const amortizationSchema = z.object({
   company_id: z.coerce.number().int().positive(),
   total_amount: z.coerce.number().positive(),
   purchase_price: z.coerce.number().min(0).nullish(), // car's real cash price
+  lease_number: z.string().max(100).nullish(),        // leasing contract number
   down_payment: z.coerce.number().min(0).default(0),
   monthly_amount: z.coerce.number().positive(),
   months_total: z.coerce.number().int().positive(),

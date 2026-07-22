@@ -38,7 +38,10 @@ export default function Vehicles() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="text-right">#</TableHead>
+                <TableHead>Lease #</TableHead>
                 <TableHead className="cursor-pointer" onClick={() => setSort('plate')}>Plate</TableHead>
+                <TableHead>Leasing</TableHead>
                 <TableHead>Make / Model</TableHead><TableHead>Year</TableHead>
                 <TableHead className="text-right cursor-pointer" onClick={() => setSort('remaining')}>Remaining lease</TableHead>
                 <TableHead className="text-right">Years left</TableHead>
@@ -47,9 +50,12 @@ export default function Vehicles() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((v) => (
+              {sorted.map((v, idx) => (
                 <TableRow key={v.id} clickable onClick={() => nav(`/vehicles/${v.id}`)}>
+                  <TableCell className="text-right text-muted-foreground tabular-nums">{idx + 1}</TableCell>
+                  <TableCell className="font-mono text-[13px]">{v.lease_number || '—'}</TableCell>
                   <TableCell className="font-semibold">{v.plate}</TableCell>
+                  <TableCell className="text-muted-foreground">{v.leasing_company ? (v.leasing_company.length > 16 ? v.leasing_company.slice(0, 16) + '…' : v.leasing_company) : '—'}</TableCell>
                   <TableCell>{v.make} {v.model}</TableCell>
                   <TableCell className="text-muted-foreground">{v.year}</TableCell>
                   <TableCell className="text-right tabular-nums">{v.remaining != null ? mkd(v.remaining) : '—'}</TableCell>

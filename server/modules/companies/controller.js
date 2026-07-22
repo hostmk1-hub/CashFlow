@@ -28,3 +28,7 @@ export const remove = asyncHandler(async (req, res) => {
 export const ledger = asyncHandler(async (req, res) => {
   res.json(await service.ledger(req.tenantId, Number(req.params.id)));
 });
+
+export const installments = asyncHandler(async (req, res) => {
+  res.json(await service.installments(req.tenantId, Number(req.params.id)));
+});

@@ -23,6 +23,53 @@ export async function remove(tenantId, id) {
   return { id: deleted.id };
 }
 
+function addMonths(dateStr, n) {
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Monthly installment schedule for what you owe this company: expands both
+ * amortization lease installments (one invoice per month) and single-invoice
+ * installment plans (count + monthly amount) into month-by-month rows, each
+ * marked paid/unpaid, so you can see which month owes how much and settle it.
+ */
+export async function installments(tenantId, id) {
+  const invoices = await repo.installmentInvoices(tenantId, id);
+  const rows = [];
+  for (const inv of invoices) {
+    if (inv.installment_count && inv.installment_count > 1) {
+      const per = Number(inv.installment_amount) || 0;
+      const paidCount = per > 0 ? Math.floor(Number(inv.paid_amount) / per) : 0;
+      for (let k = 0; k < inv.installment_count; k++) {
+        rows.push({
+          invoiceId: inv.id,
+          kind: 'plan-installment',
+          month: addMonths(inv.due_date, k),
+          label: `${inv.description} · ${k + 1}/${inv.installment_count}`,
+          amount: per,
+          paid: k < paidCount,
+        });
+      }
+    } else {
+      rows.push({
+        invoiceId: inv.id,
+        kind: 'invoice',
+        month: inv.due_date,
+        label: inv.description,
+        amount: Number(inv.amount),
+        remaining: Number(inv.remaining),
+        paid: inv.status === 'paid',
+      });
+    }
+  }
+  rows.sort((a, b) => new Date(a.month) - new Date(b.month));
+  const totalDue = rows.filter((r) => !r.paid).reduce((s, r) => s + r.amount, 0);
+  const totalPaid = rows.filter((r) => r.paid).reduce((s, r) => s + r.amount, 0);
+  return { rows, totalDue, totalPaid, count: rows.length };
+}
+
 export async function ledger(tenantId, id) {
   const company = await getById(tenantId, id);
   const payables = await repo.balances(tenantId, id);

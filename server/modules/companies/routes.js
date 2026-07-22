@@ -7,6 +7,7 @@ const router = Router();
 router.get('/', ctrl.list);
 router.get('/:id', ctrl.getById);
 router.get('/:id/ledger', ctrl.ledger);
+router.get('/:id/installments', ctrl.installments);
 router.post('/', requireMinRole('staff'), ctrl.create);
 router.put('/:id', requireMinRole('manager'), ctrl.update);
 router.delete('/:id', requireMinRole('manager'), ctrl.remove);

@@ -29,11 +29,12 @@ export async function create(tenantId, input) {
     const { rows } = await client.query(
       `INSERT INTO amortization_plans
         (tenant_id, vehicle_id, company_id, total_amount, down_payment, monthly_amount,
-         months_total, interest_rate, start_date, scan_url, currency, exchange_rate, purchase_price)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+         months_total, interest_rate, start_date, scan_url, currency, exchange_rate, purchase_price, lease_number)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [tenantId, input.vehicle_id, input.company_id, total.amount, down.amount,
        money.amount, input.months_total, input.interest_rate ?? null, input.start_date,
-       input.scan_url || null, money.currency, money.exchangeRate, purchase ? purchase.amount : null],
+       input.scan_url || null, money.currency, money.exchangeRate, purchase ? purchase.amount : null,
+       input.lease_number || null],
     );
     const plan = rows[0];
 

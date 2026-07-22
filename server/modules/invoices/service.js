@@ -1,6 +1,7 @@
 import { ApiError } from '../../shared/http.js';
 import { toMkd, round2 } from '../../shared/currency.js';
 import * as repo from './repository.js';
+import * as paymentService from '../payments/service.js';
 
 export const list = (tenantId, filters) => repo.list(tenantId, filters);
 
@@ -9,6 +10,28 @@ export async function getById(tenantId, id) {
   if (!invoice) throw new ApiError(404, 'Invoice not found');
   const allocations = await repo.allocations(tenantId, id);
   return { ...invoice, allocations };
+}
+
+/**
+ * Pay a SPECIFIC invoice directly (bypasses FIFO): records a payment allocated
+ * only to this invoice. Defaults to the full remaining amount; pass `amount`
+ * (e.g. one installment) for a partial payment. Marks it paid when fully settled.
+ */
+export async function payInvoice(tenantId, invoiceId, { amount, method = 'bank' } = {}) {
+  const inv = await repo.getById(tenantId, invoiceId);
+  if (!inv) throw new ApiError(404, 'Invoice not found');
+  const remaining = round2(Number(inv.amount) - Number(inv.paid_amount));
+  if (remaining <= 0) throw new ApiError(400, 'Invoice is already fully paid');
+  const payAmount = amount ? Math.min(round2(Number(amount)), remaining) : remaining;
+  return paymentService.create(tenantId, {
+    companyId: inv.company_id || undefined,
+    workerId: inv.worker_id || undefined,
+    amount: payAmount,
+    currency: 'MKD',
+    method,
+    invoiceIds: [invoiceId],
+    note: 'Direct payment for this invoice',
+  });
 }
 
 /**

@@ -23,6 +23,12 @@ export default function Invoices() {
     api.get('/workers').then(setWorkers);
   }, []);
 
+  async function markPaid(inv) {
+    if (!confirm(`Mark "${inv.description}" as fully paid (${mkd(Number(inv.amount) - Number(inv.paid_amount))} remaining)?`)) return;
+    try { await api.post(`/invoices/${inv.id}/pay`, { method: 'bank' }); load(); }
+    catch (e) { alert(e.message); }
+  }
+
   return (
     <>
       <div className="page-head">
@@ -51,7 +57,7 @@ export default function Invoices() {
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No invoices match.</Empty> : (
         <div className="card table-wrap">
           <table className="tbl">
-            <thead><tr><th>Description</th><th>Company / Worker</th><th>Vehicle</th><th>Category</th><th className="num">Amount</th><th className="num">Paid</th><th>Due</th><th>Source</th><th>Status</th></tr></thead>
+            <thead><tr><th>Description</th><th>Company / Worker</th><th>Vehicle</th><th>Category</th><th className="num">Amount</th><th className="num">Paid</th><th>Due</th><th>Source</th><th>Status</th><th></th></tr></thead>
             <tbody>{rows.map((i) => (
               <tr key={i.id}>
                 <td>
@@ -72,6 +78,7 @@ export default function Invoices() {
                 <td className="muted">{date(i.due_date)}</td>
                 <td><Badge tone="gray">{i.source}</Badge></td>
                 <td><StatusBadge status={i.status} /></td>
+                <td className="num">{i.status !== 'paid' && <button className="btn ghost sm" onClick={() => markPaid(i)}>Mark paid</button>}</td>
               </tr>
             ))}</tbody>
           </table>

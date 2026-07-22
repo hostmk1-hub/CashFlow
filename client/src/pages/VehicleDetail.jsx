@@ -6,6 +6,7 @@ import { mkd, date } from '../lib/format.js';
 import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge } from '../components/ui.jsx';
 
 function utilTone(u) { return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
+function addMonthsStr(dateStr, n) { const d = new Date(dateStr); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
 
 export default function VehicleDetail() {
   const { id } = useParams();
@@ -60,13 +61,16 @@ export default function VehicleDetail() {
               </div>
               <div className="muted" style={{ fontSize: 13 }}>{paidPct}% paid off</div>
               <div className="grid row2" style={{ marginTop: 12, fontSize: 13 }}>
+                <div>Leasing company: <b>{plan.company_name}</b></div>
+                <div>Lease / contract #: <b>{plan.lease_number || '—'}</b></div>
                 {plan.purchase_price != null && <div>Car price (cash): <b>{mkd(plan.purchase_price)}</b></div>}
                 <div>Lease total: <b>{mkd(plan.total_amount)}</b> <EurBadge currency={plan.currency} /></div>
                 <div>Monthly: <b>{mkd(plan.monthly_amount)}</b></div>
+                <div>Lease starts: <b>{date(plan.start_date)}</b></div>
+                <div>Last month: <b>{date(addMonthsStr(plan.start_date, (plan.months_total || 1) - 1))}</b></div>
                 <div>Remaining: <b>{mkd(prog?.remaining || 0)}</b></div>
                 <div>Installments left: <b>{prog?.installments_left ?? '—'}</b></div>
                 <div>Years left: <b>{prog?.years_left ?? '—'}</b></div>
-                <div>Leasing: <b>{plan.company_name}</b></div>
               </div>
               {plan.purchase_price != null && Number(plan.purchase_price) > 0 && (
                 <div className="preview-box" style={{ marginTop: 12 }}>
@@ -128,7 +132,7 @@ export default function VehicleDetail() {
 
 function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
   const [mode, setMode] = useState('manual'); // manual | scan
-  const [f, setF] = useState({ company_id: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
+  const [f, setF] = useState({ company_id: '', lease_number: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -150,7 +154,7 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
     setBusy(true); setErr('');
     try {
       await api.post('/amortization', {
-        vehicle_id: Number(vehicleId), company_id: Number(f.company_id),
+        vehicle_id: Number(vehicleId), company_id: Number(f.company_id), lease_number: f.lease_number || null,
         total_amount: Number(f.total_amount), purchase_price: f.purchase_price === '' ? null : Number(f.purchase_price),
         down_payment: Number(f.down_payment || 0),
         monthly_amount: Number(f.monthly_amount), months_total: Number(f.months_total),
@@ -178,7 +182,10 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
         </>
       ) : (
         <>
-          <Field label="Leasing company"><select className="select" value={f.company_id} onChange={set('company_id')}><option value="">Select…</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+          <div className="row2">
+            <Field label="Leasing company"><select className="select" value={f.company_id} onChange={set('company_id')}><option value="">Select…</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+            <Field label="Lease / contract number"><input className="input" value={f.lease_number} onChange={set('lease_number')} placeholder="e.g. LN-2026-00123" /></Field>
+          </div>
           <div className="row2">
             <Field label="Car purchase price (cash)"><input className="input" type="number" value={f.purchase_price} onChange={set('purchase_price')} placeholder="what the car actually costs" /></Field>
             <Field label="Currency"><CurrencyToggle value={f.currency} onChange={(c) => setF({ ...f, currency: c })} /></Field>

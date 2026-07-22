@@ -91,6 +91,18 @@ export function clientPaymentHistory(tenantId, id) {
     [tenantId, id],
   ).then((r) => r.rows);
 }
+export function installmentInvoices(tenantId, id) {
+  return query(
+    `SELECT id, description, amount, paid_amount, due_date, status, source,
+            installment_count, installment_amount, remaining
+     FROM invoices
+     WHERE tenant_id = $1 AND company_id = $2
+       AND (source = 'amortization' OR installment_count IS NOT NULL)
+     ORDER BY due_date`,
+    [tenantId, id],
+  ).then((r) => r.rows);
+}
+
 export function linkedVehicles(tenantId, id) {
   return query(
     `SELECT DISTINCT v.* FROM vehicles v
