@@ -134,7 +134,9 @@ export async function scanInvoiceDocument(tenantId, file) {
   const prompt =
     'You are an invoice/receipt data extractor. Return ONLY JSON with keys: ' +
     'invoice_number, description, amount (number), currency (MKD or EUR), date (YYYY-MM-DD), ' +
-    'vendor_name, detected_plate (any North Macedonia license plate like "SK 1234 AB" or null). ' +
+    'vendor_name, detected_plate (any North Macedonia license plate like "SK 1234 AB" or null), ' +
+    'lease_number (any lease/contract/policy/chassis (VIN) or reference number that identifies a specific ' +
+    'vehicle, as printed, or null). ' +
     CYRILLIC_NOTE;
   return callVision({ tenantId, model, prompt, file });
 }

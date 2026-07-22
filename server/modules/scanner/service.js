@@ -84,15 +84,29 @@ export async function scanInvoice(tenantId, file) {
   let saved = { scan_url: null };
   try { saved = await saveScan(tenantId, file); } catch (e) { console.error('[scan] save failed:', e.message); }
 
-  const vehicles = (await query(`SELECT id, plate FROM vehicles WHERE tenant_id = $1 AND active = true`, [tenantId])).rows;
+  // Each vehicle with its latest lease/contract number, so a car with no plates
+  // yet can still be matched by its lease number printed on the invoice.
+  const vehicles = (await query(
+    `SELECT v.id, v.plate,
+            (SELECT lease_number FROM amortization_plans ap
+             WHERE ap.vehicle_id = v.id AND ap.lease_number IS NOT NULL ORDER BY ap.id DESC LIMIT 1) AS lease_number
+     FROM vehicles v WHERE v.tenant_id = $1 AND v.active = true`,
+    [tenantId],
+  )).rows;
   const companies = (await query(`SELECT id, name FROM companies WHERE tenant_id = $1 AND active = true`, [tenantId])).rows;
 
-  const searchText = `${extracted.detected_plate || ''} ${extracted.description || ''} ${extracted.vendor_name || ''}`;
+  const searchText = `${extracted.detected_plate || ''} ${extracted.description || ''} ${extracted.vendor_name || ''} ${extracted.invoice_number || ''} ${extracted.lease_number || ''}`;
   const matchedPlate = extracted.detected_plate
     ? findPlateMatch(extracted.detected_plate, vehicles.map((v) => v.plate)) ||
       findPlateMatch(searchText, vehicles.map((v) => v.plate))
     : findPlateMatch(searchText, vehicles.map((v) => v.plate));
-  const matchedVehicle = matchedPlate ? vehicles.find((v) => v.plate.replace(/[\s-]/g, '').toUpperCase() === matchedPlate.replace(/[\s-]/g, '').toUpperCase()) : null;
+  let matchedVehicle = matchedPlate ? vehicles.find((v) => v.plate.replace(/[\s-]/g, '').toUpperCase() === matchedPlate.replace(/[\s-]/g, '').toUpperCase()) : null;
+  // Fall back to a lease-number match (plateless cars identified by lease/contract number).
+  let matchedBy = matchedVehicle ? 'plate' : null;
+  if (!matchedVehicle) {
+    matchedVehicle = matchVehicleByLease(extracted.lease_number, searchText, vehicles);
+    if (matchedVehicle) matchedBy = 'lease_number';
+  }
   const matchedCompany = fuzzyCompanyMatch(extracted.vendor_name, companies);
 
   const rate = await getEurRate(tenantId);
@@ -105,11 +119,29 @@ export async function scanInvoice(tenantId, file) {
     date: extracted.date ?? null,
     vendor_name: extracted.vendor_name ?? null,
     detected_plate: extracted.detected_plate ?? matchedPlate ?? null,
+    detected_lease_number: extracted.lease_number ?? null,
     matched_vehicle_id: matchedVehicle?.id ?? null,
+    matched_vehicle_by: matchedBy,   // 'plate' | 'lease_number' | null
     matched_company_id: matchedCompany?.id ?? null,
     scan_url: saved.scan_url,
     _raw: extracted._raw,
   };
+}
+
+// Match a vehicle by its lease/contract number: the extracted lease number (or
+// the document text) contains the vehicle's stored lease number. Normalized so
+// spaces/dashes/case don't matter; requires a reasonably specific (>=4 char) key.
+function matchVehicleByLease(extractedLease, searchText, vehicles) {
+  const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const hay = norm(`${extractedLease || ''} ${searchText || ''}`);
+  let best = null;
+  for (const v of vehicles) {
+    const key = norm(v.lease_number);
+    if (key.length >= 4 && hay.includes(key)) {
+      if (!best || key.length > norm(best.lease_number).length) best = v; // prefer the most specific match
+    }
+  }
+  return best;
 }
 
 export async function confirmInvoice(tenantId, draft, fileUrl) {

@@ -15,6 +15,7 @@ export default function VehicleDetail() {
   const [incomeOpen, setIncomeOpen] = useState(false);
   const [amortOpen, setAmortOpen] = useState(false);
   const [amortEdit, setAmortEdit] = useState(null);
+  const [scanOpen, setScanOpen] = useState(false);
   const [companies, setCompanies] = useState([]);
 
   const load = () => api.get(`/vehicles/${id}`).then(setD).catch(() => {});
@@ -46,6 +47,7 @@ export default function VehicleDetail() {
           <div className="page-title">{d.vehicle.plate} · {d.vehicle.make} {d.vehicle.model}</div>
         </div>
         <div className="toolbar">
+          <button className="btn ghost" onClick={() => setScanOpen(true)}>📷 Scan Invoice / Expense</button>
           <button className="btn ghost" onClick={() => setAmortOpen(true)}>+ Amortization Plan</button>
           <button className="btn" onClick={() => setIncomeOpen(true)}>+ Monthly Income</button>
         </div>
@@ -146,7 +148,75 @@ export default function VehicleDetail() {
       {incomeOpen && <IncomeModal vehicleId={id} onClose={() => setIncomeOpen(false)} onSaved={() => { setIncomeOpen(false); load(); }} />}
       {amortOpen && <AmortizationModal vehicleId={id} companies={companies} onClose={() => setAmortOpen(false)} onSaved={() => { setAmortOpen(false); load(); }} />}
       {amortEdit && <AmortizationModal plan={amortEdit} vehicleId={id} companies={companies} onClose={() => setAmortEdit(null)} onSaved={() => { setAmortEdit(null); load(); }} />}
+      {scanOpen && <VehicleScanModal vehicleId={id} plate={d.vehicle.plate} companies={companies} onClose={() => setScanOpen(false)} onSaved={() => { setScanOpen(false); load(); }} />}
     </>
+  );
+}
+
+const EXPENSE_CATS = ['leasing', 'insurance', 'repairs', 'service', 'tires', 'other'];
+
+// Upload an invoice/expense (photo or PDF) directly on a car. Gemini reads it,
+// we force the vehicle to THIS car, and save it as an expense against it.
+function VehicleScanModal({ vehicleId, plate, companies, onClose, onSaved }) {
+  const [draft, setDraft] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
+
+  async function onFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const d = await api.upload('/invoices/scan', fd);
+      // Force the vehicle to the car we're on; keep any detected company/category.
+      setDraft({ ...d, matched_vehicle_id: Number(vehicleId), category: d.category || '', installments: 1 });
+    } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
+  }
+  async function confirm() {
+    setBusy(true); setErr('');
+    try { await api.post('/invoices/scan/confirm', { ...draft, matched_vehicle_id: Number(vehicleId) }); onSaved(); }
+    catch (ex) { setErr(ex.message); setBusy(false); }
+  }
+
+  return (
+    <Modal title={`Scan Invoice / Expense — ${plate}`} onClose={onClose} wide
+      footer={draft && <><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy} onClick={confirm}>Save to this car</button></>}>
+      {err && <div className="error-msg">{err}</div>}
+      {!draft ? (
+        <>
+          <p className="muted">Upload a photo or PDF of the invoice/expense. Gemini reads the fields and it’s saved against <b>{plate}</b>. Nothing saves until you confirm.</p>
+          <input type="file" accept="image/*,application/pdf" onChange={onFile} />
+          {busy && <Spinner />}
+        </>
+      ) : (
+        <>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Saving to <b>{plate}</b>{draft.matched_vehicle_by === 'lease_number' ? ' (matched by lease number)' : ''}.</div>
+          <div className="row2">
+            <Field label="Invoice #"><input className="input" value={draft.invoice_number || ''} onChange={set('invoice_number')} /></Field>
+            <Field label="Date"><input className="input" type="date" value={draft.date || ''} onChange={set('date')} /></Field>
+          </div>
+          <Field label="Description"><input className="input" value={draft.description || ''} onChange={set('description')} /></Field>
+          <div className="row2">
+            <Field label="Amount"><input className="input" type="number" value={draft.amount || ''} onChange={set('amount')} /></Field>
+            <Field label="Currency"><CurrencyToggle value={draft.currency} onChange={(c) => setDraft({ ...draft, currency: c })} /></Field>
+          </div>
+          <div className="row2">
+            <Field label={`Company ${draft.vendor_name ? '(detected: ' + draft.vendor_name + ')' : ''}`}>
+              <select className="select" value={draft.matched_company_id || ''} onChange={(e) => setDraft({ ...draft, matched_company_id: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">— pick company —</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Category">
+              <select className="select" value={draft.category || ''} onChange={set('category')}>
+                <option value="">—</option>{EXPENSE_CATS.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+              </select>
+            </Field>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }
 
