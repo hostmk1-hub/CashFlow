@@ -6,11 +6,11 @@ export function Dialog({ open = true, onOpenChange, className, children }) {
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-slate-900/45 p-5"
+      className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/60 p-5 backdrop-blur-sm"
       onClick={() => onOpenChange?.(false)}
     >
       <div
-        className={cn('w-full max-w-lg max-h-[90vh] overflow-auto rounded-2xl bg-card shadow-2xl', className)}
+        className={cn('w-full max-w-lg max-h-[90vh] overflow-auto rounded-2xl border border-border bg-card text-card-foreground shadow-2xl', className)}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

@@ -1,25 +1,14 @@
 import { cn } from '../../lib/utils.js';
 
+const base =
+  'w-full rounded-lg border border-input bg-background text-[15px] text-foreground shadow-sm transition-colors ' +
+  'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-ring ' +
+  'focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50';
+
 export function Input({ className, ...props }) {
-  return (
-    <input
-      className={cn(
-        'flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50',
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <input className={cn(base, 'h-11 px-3.5 py-2', className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }) {
-  return (
-    <textarea
-      className={cn(
-        'flex min-h-[70px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <textarea className={cn(base, 'min-h-[80px] px-3.5 py-2.5', className)} {...props} />;
 }

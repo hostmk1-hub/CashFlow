@@ -1,12 +1,12 @@
 import { cn } from '../../lib/utils.js';
 
-// A native <select> styled to match shadcn/ui (keeps things dependency-free
-// while looking consistent with the Radix-based select).
+// A native <select> styled to match the Input — clear border + fill in both themes.
 export function Select({ className, children, ...props }) {
   return (
     <select
       className={cn(
-        'flex h-10 w-full items-center rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:opacity-50',
+        'h-11 w-full items-center rounded-lg border border-input bg-background px-3.5 text-[15px] text-foreground shadow-sm ' +
+          'transition-colors focus-visible:outline-none focus-visible:border-ring focus-visible:ring-4 focus-visible:ring-ring/25 disabled:opacity-50',
         className,
       )}
       {...props}

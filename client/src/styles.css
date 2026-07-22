@@ -51,7 +51,7 @@
   --destructive: 0 84% 66%;
   --destructive-foreground: 0 0% 100%;
   --border: 220 34% 18%;
-  --input: 220 34% 18%;
+  --input: 218 20% 34%;   /* form-field border — brighter than dividers so inputs read clearly on dark cards */
   --ring: 239 84% 67%;
 }
 
@@ -92,7 +92,7 @@
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
   --border: 220 24% 91%;
-  --input: 220 24% 91%;
+  --input: 220 18% 76%;   /* form-field border — darker than dividers so inputs read clearly on white cards */
   --ring: 243 75% 59%;
 }
 
