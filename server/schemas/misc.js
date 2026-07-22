@@ -39,4 +39,6 @@ export const amortizationSchema = z.object({
   exchange_rate: z.coerce.number().positive().optional(),
   scan_url: z.string().nullish(),
   generate_invoices: z.boolean().default(true),
+  // Whether the down payment was prepaid (records it as a settled expense).
+  down_payment_paid: z.boolean().default(true),
 });

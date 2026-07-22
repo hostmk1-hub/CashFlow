@@ -121,7 +121,7 @@ export default function VehicleDetail() {
 
 function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
   const [mode, setMode] = useState('manual'); // manual | scan
-  const [f, setF] = useState({ company_id: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true });
+  const [f, setF] = useState({ company_id: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -148,6 +148,7 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
         monthly_amount: Number(f.monthly_amount), months_total: Number(f.months_total),
         interest_rate: f.interest_rate === '' ? null : Number(f.interest_rate),
         start_date: f.start_date, currency: f.currency, generate_invoices: f.generate_invoices,
+        down_payment_paid: f.down_payment_paid,
       });
       onSaved();
     } catch (ex) { setErr(ex.message); setBusy(false); }
@@ -175,9 +176,22 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
             <Field label="Currency"><CurrencyToggle value={f.currency} onChange={(c) => setF({ ...f, currency: c })} /></Field>
           </div>
           <div className="row2">
-            <Field label="Down payment"><input className="input" type="number" value={f.down_payment} onChange={set('down_payment')} /></Field>
+            <Field label="First / down payment"><input className="input" type="number" value={f.down_payment} onChange={set('down_payment')} placeholder="0" /></Field>
             <Field label="Monthly installment"><input className="input" type="number" value={f.monthly_amount} onChange={set('monthly_amount')} /></Field>
           </div>
+          {Number(f.down_payment) > 0 && (
+            <Field>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={f.down_payment_paid} onChange={(e) => setF({ ...f, down_payment_paid: e.target.checked })} />
+                Down payment already paid (prepaid before taking the car)
+              </label>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                {f.down_payment_paid
+                  ? `Records ${new Intl.NumberFormat('mk-MK').format(Number(f.down_payment))} ${f.currency === 'EUR' ? '€' : 'ден'} as a settled expense (shows in this car's expenses + the leasing company ledger).`
+                  : 'Creates an unpaid invoice for the down payment (you can pay it later).'}
+              </div>
+            </Field>
+          )}
           <div className="row2">
             <Field label="Months total"><input className="input" type="number" value={f.months_total} onChange={set('months_total')} /></Field>
             <Field label="Interest rate %"><input className="input" type="number" value={f.interest_rate} onChange={set('interest_rate')} /></Field>
