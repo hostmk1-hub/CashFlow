@@ -1,6 +1,7 @@
 import { query } from '../../shared/db.js';
 import { getEurRate } from '../../shared/currency.js';
 import { scanInvoiceDocument, scanAmortizationDocument } from '../../services/geminiService.js';
+import { saveScan } from '../../services/fileStorage.js';
 import { ApiError } from '../../shared/http.js';
 import * as invoiceService from '../invoices/service.js';
 
@@ -34,6 +35,10 @@ export async function scanInvoice(tenantId, file) {
   if (!file) throw new ApiError(400, 'No file uploaded');
   const extracted = await scanInvoiceDocument(tenantId, file);
 
+  // Persist the original scan (local + R2) so it can be downloaded later.
+  let saved = { scan_url: null };
+  try { saved = await saveScan(tenantId, file); } catch (e) { console.error('[scan] save failed:', e.message); }
+
   const vehicles = (await query(`SELECT id, plate FROM vehicles WHERE tenant_id = $1 AND active = true`, [tenantId])).rows;
   const companies = (await query(`SELECT id, name FROM companies WHERE tenant_id = $1 AND active = true`, [tenantId])).rows;
 
@@ -57,6 +62,7 @@ export async function scanInvoice(tenantId, file) {
     detected_plate: extracted.detected_plate ?? matchedPlate ?? null,
     matched_vehicle_id: matchedVehicle?.id ?? null,
     matched_company_id: matchedCompany?.id ?? null,
+    scan_url: saved.scan_url,
     _raw: extracted._raw,
   };
 }
@@ -73,7 +79,7 @@ export async function confirmInvoice(tenantId, draft, fileUrl) {
     exchange_rate: draft.exchange_rate,
     source: 'scanned',
     scanned: true,
-    scan_url: fileUrl || null,
+    scan_url: draft.scan_url || fileUrl || null,
   });
 }
 

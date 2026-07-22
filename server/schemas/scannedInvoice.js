@@ -12,4 +12,5 @@ export const scannedInvoiceDraftSchema = z.object({
   matched_vehicle_id: z.coerce.number().int().positive().nullish(),
   detected_plate: z.string().nullish(),
   exchange_rate: z.coerce.number().positive().optional(),
+  scan_url: z.string().nullish(),
 });

@@ -15,6 +15,7 @@ export default function CompanyDetail() {
   const [d, setD] = useState(null);
   const [tab, setTab] = useState('invoices');
   const [paying, setPaying] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [inst, setInst] = useState(null);
 
   const load = () => {
@@ -42,7 +43,10 @@ export default function CompanyDetail() {
           <div className="muted" style={{ cursor: 'pointer' }} onClick={() => nav('/companies')}>← Companies</div>
           <div className="page-title">{d.company.name} <Badge tone="blue">{d.company.type}</Badge></div>
         </div>
-        <button className="btn" onClick={() => setPaying(true)}>💸 Pay This Company</button>
+        <div className="toolbar">
+          <button className="btn ghost" onClick={() => setReconciling(true)}>⇄ Reconcile invoices</button>
+          <button className="btn" onClick={() => setPaying(true)}>💸 Pay This Company</button>
+        </div>
       </div>
 
       <div className="grid stat-grid" style={{ marginBottom: 16 }}>
@@ -98,7 +102,77 @@ export default function CompanyDetail() {
       </div>
 
       {paying && <PayModal company={d.company} onClose={() => setPaying(false)} onDone={() => { setPaying(false); load(); }} />}
+      {reconciling && <ReconcileModal companyId={id} companyName={d.company.name} onClose={() => setReconciling(false)} />}
     </>
+  );
+}
+
+function ReconcileModal({ companyId, companyName, onClose }) {
+  const [report, setReport] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function onFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      setReport(await api.upload(`/companies/${companyId}/reconcile`, fd));
+    } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><h3>Reconcile invoices — {companyName}</h3><button className="x-btn" onClick={onClose}>×</button></div>
+        <div className="modal-body">
+          {err && <div className="error-msg">{err}</div>}
+          {!report ? (
+            <>
+              <p className="muted">Upload the invoice list the company sent you (CSV or Excel). We match it against our records by <b>invoice number</b> and flag anything missing or different. The file should have an invoice-number column (amount and status columns are used if present).</p>
+              <input type="file" accept=".csv,.xlsx,text/csv" onChange={onFile} />
+              {busy && <Spinner />}
+            </>
+          ) : (
+            <>
+              <div className="grid stat-grid" style={{ marginBottom: 14 }}>
+                <div className="card stat"><div className="label">Their list</div><div className="value">{report.uploadedCount}</div></div>
+                <div className="card stat"><div className="label">In our system</div><div className="value">{report.systemCount}</div></div>
+                <div className="card stat"><div className="label">Matched</div><div className="value" style={{ color: 'var(--pos)' }}>{report.matchedCount}</div></div>
+              </div>
+
+              <Section title={`Missing in our system (${report.missingInSystem.length})`} tone="red" hint="On their list but not recorded here — likely invoices you haven't entered.">
+                {report.missingInSystem.map((r, i) => <div key={i} className="row-line"><b>{r.invoice_number}</b> {r.amount != null && <span className="muted">· {mkd(r.amount)}</span>} {r.status && <Badge tone="gray">{r.status}</Badge>}</div>)}
+              </Section>
+
+              <Section title={`Amount / status differences (${report.mismatches.length})`} tone="yellow" hint="Same invoice number, but the amount or paid status differs.">
+                {report.mismatches.map((m, i) => (
+                  <div key={i} className="row-line"><b>{m.invoice_number}</b> — {m.issues.map((s, j) => <span key={j} className="muted">{s.field}: theirs <b>{typeof s.theirs === 'number' ? mkd(s.theirs) : s.theirs}</b> vs ours <b>{typeof s.ours === 'number' ? mkd(s.ours) : s.ours}</b>{j < m.issues.length - 1 ? ' · ' : ''}</span>)}</div>
+                ))}
+              </Section>
+
+              <Section title={`In our system, not on their list (${report.extraInSystem.length})`} tone="blue" hint="We have these but they weren't on the uploaded list.">
+                {report.extraInSystem.map((inv, i) => <div key={i} className="row-line"><b>{inv.invoice_number}</b> <span className="muted">· {mkd(inv.amount)} · {inv.status}</span></div>)}
+              </Section>
+
+              <button className="btn ghost" style={{ marginTop: 12 }} onClick={() => setReport(null)}>Upload another file</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, tone, hint, children }) {
+  const empty = !children || (Array.isArray(children) && children.length === 0);
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}><Badge tone={tone}>{title}</Badge></div>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>{hint}</div>
+      {empty ? <div className="muted" style={{ fontSize: 13 }}>None ✓</div> : <div style={{ display: 'grid', gap: 4, fontSize: 13 }}>{children}</div>}
+    </div>
   );
 }
 

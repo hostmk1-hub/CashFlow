@@ -91,6 +91,14 @@ export function clientPaymentHistory(tenantId, id) {
     [tenantId, id],
   ).then((r) => r.rows);
 }
+export function reconcileInvoices(tenantId, id) {
+  return query(
+    `SELECT id, invoice_number, description, amount, paid_amount, status, due_date
+     FROM invoices WHERE tenant_id = $1 AND company_id = $2 AND invoice_number IS NOT NULL`,
+    [tenantId, id],
+  ).then((r) => r.rows);
+}
+
 export function installmentInvoices(tenantId, id) {
   return query(
     `SELECT id, description, amount, paid_amount, due_date, status, source,

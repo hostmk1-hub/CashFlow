@@ -6,6 +6,7 @@ const router = Router();
 
 router.get('/', ctrl.list);
 router.get('/:id', ctrl.getById);
+router.get('/:id/download', ctrl.download);
 router.post('/', requireMinRole('staff'), ctrl.create);
 router.post('/:id/pay', requireMinRole('manager'), ctrl.payInvoice);
 

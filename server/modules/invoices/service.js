@@ -1,7 +1,12 @@
+import path from 'node:path';
 import { ApiError } from '../../shared/http.js';
 import { toMkd, round2 } from '../../shared/currency.js';
+import { readScan } from '../../services/fileStorage.js';
+import { generateInvoicePdfBuffer } from '../../services/pdfService.js';
 import * as repo from './repository.js';
 import * as paymentService from '../payments/service.js';
+
+const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
 
 export const list = (tenantId, filters) => repo.list(tenantId, filters);
 
@@ -10,6 +15,24 @@ export async function getById(tenantId, id) {
   if (!invoice) throw new ApiError(404, 'Invoice not found');
   const allocations = await repo.allocations(tenantId, id);
   return { ...invoice, allocations };
+}
+
+/**
+ * Download an invoice: the attached scan (from the local volume or R2) if there
+ * is one, otherwise a generated PDF of the invoice details.
+ */
+export async function downloadInvoice(tenantId, invoiceId) {
+  const inv = await repo.getById(tenantId, invoiceId);
+  if (!inv) throw new ApiError(404, 'Invoice not found');
+  if (inv.scan_url) {
+    const scan = await readScan(inv.scan_url).catch(() => null);
+    if (scan) {
+      const ext = (path.extname(scan.filename).slice(1) || 'bin').toLowerCase();
+      return { buffer: scan.buffer, filename: scan.filename, contentType: MIME[ext] || 'application/octet-stream' };
+    }
+  }
+  const pdf = await generateInvoicePdfBuffer(tenantId, inv);
+  return { buffer: pdf, filename: `invoice-${inv.id}.pdf`, contentType: 'application/pdf' };
 }
 
 /**

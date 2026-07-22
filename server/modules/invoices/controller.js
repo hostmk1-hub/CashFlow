@@ -17,3 +17,10 @@ export const payInvoice = asyncHandler(async (req, res) =>
     amount: req.body.amount, method: req.body.method,
   })),
 );
+
+export const download = asyncHandler(async (req, res) => {
+  const { buffer, filename, contentType } = await service.downloadInvoice(req.tenantId, Number(req.params.id));
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.end(buffer);
+});

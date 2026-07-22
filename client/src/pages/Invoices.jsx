@@ -78,7 +78,10 @@ export default function Invoices() {
                 <td className="muted">{date(i.due_date)}</td>
                 <td><Badge tone="gray">{i.source}</Badge></td>
                 <td><StatusBadge status={i.status} /></td>
-                <td className="num">{i.status !== 'paid' && <button className="btn ghost sm" onClick={() => markPaid(i)}>Mark paid</button>}</td>
+                <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                  <button className="btn ghost sm" title={i.scanned ? 'Download attached scan' : 'Download invoice PDF'} onClick={() => api.download(`/invoices/${i.id}/download`, (i.invoice_number || 'invoice-' + i.id)).catch((e) => alert(e.message))}>⭳</button>
+                  {i.status !== 'paid' && <button className="btn ghost sm" style={{ marginLeft: 4 }} onClick={() => markPaid(i)}>Mark paid</button>}
+                </td>
               </tr>
             ))}</tbody>
           </table>

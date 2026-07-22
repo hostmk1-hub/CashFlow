@@ -27,6 +27,53 @@ async function tenantLetterhead(tenantId) {
 }
 
 /**
+ * Render a payables invoice to a PDF Buffer — used by the download button for
+ * invoices that don't have an attached scan.
+ */
+export async function generateInvoicePdfBuffer(tenantId, invoice) {
+  const head = await tenantLetterhead(tenantId);
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    doc.fontSize(20).fillColor('#111').text(head.name);
+    doc.fontSize(9).fillColor('#666');
+    if (head.address) doc.text(head.address);
+    if (head.phone) doc.text(head.phone);
+    doc.moveDown();
+
+    doc.fillColor('#111').fontSize(16).text('EXPENSE INVOICE', { align: 'right' });
+    doc.fontSize(10).fillColor('#444')
+      .text(`No: ${invoice.invoice_number || '#' + invoice.id}`, { align: 'right' })
+      .text(`Vendor: ${invoice.company_name || invoice.worker_name || ''}`, { align: 'right' })
+      .text(`Due: ${String(invoice.due_date).slice(0, 10)}`, { align: 'right' })
+      .text(`Status: ${invoice.status}`, { align: 'right' });
+    doc.moveDown(2);
+
+    const top = doc.y;
+    doc.fillColor('#111').fontSize(10);
+    doc.text('Description', 50, top);
+    doc.text('Amount', 400, top, { width: 145, align: 'right' });
+    doc.moveTo(50, top + 16).lineTo(545, top + 16).strokeColor('#ccc').stroke();
+    doc.text(invoice.description, 50, top + 24, { width: 340 });
+    const amt = invoice.currency === 'EUR'
+      ? `${fmtMkd(invoice.amount)}  (€${invoice.original_amount} @ ${invoice.exchange_rate})`
+      : fmtMkd(invoice.amount);
+    doc.text(amt, 400, top + 24, { width: 145, align: 'right' });
+
+    doc.moveDown(4).fontSize(11).fillColor('#111')
+      .text(`Total: ${fmtMkd(invoice.amount)}`, { align: 'right' })
+      .text(`Paid: ${fmtMkd(invoice.paid_amount)}`, { align: 'right' })
+      .text(`Remaining: ${fmtMkd(Number(invoice.amount) - Number(invoice.paid_amount))}`, { align: 'right' });
+    if (invoice.category) doc.moveDown().fontSize(9).fillColor('#888').text(`Category: ${invoice.category}`, 50);
+    doc.end();
+  });
+}
+
+/**
  * Render a client invoice to a PDF file (tenant letterhead, itemized amount,
  * due date, payment terms). Returns a web path under /uploads. PDFKit ships
  * Helvetica which covers Latin; Cyrillic descriptions render via the bundled
