@@ -1,4 +1,5 @@
 import { ApiError } from '../../shared/http.js';
+import { round2 } from '../../shared/currency.js';
 import * as repo from './repository.js';
 
 export const list = (tenantId, filters) => repo.list(tenantId, filters);
@@ -40,16 +41,27 @@ export async function installments(tenantId, id) {
   const rows = [];
   for (const inv of invoices) {
     if (inv.installment_count && inv.installment_count > 1) {
-      const per = Number(inv.installment_amount) || 0;
-      const paidCount = per > 0 ? Math.floor(Number(inv.paid_amount) / per) : 0;
-      for (let k = 0; k < inv.installment_count; k++) {
+      const count = inv.installment_count;
+      const total = round2(Number(inv.amount));
+      // Even monthly amount; the LAST installment absorbs the rounding remainder
+      // so the installments sum to the exact full price (e.g. 100 / 3 → 33.33,
+      // 33.33, 33.34 — not 3 × 33.33 = 99.99).
+      const per = round2(Number(inv.installment_amount) || total / count);
+      const paidAmt = Number(inv.paid_amount);
+      let cumulative = 0;
+      for (let k = 0; k < count; k++) {
+        const isLast = k === count - 1;
+        const amount = isLast ? round2(total - per * (count - 1)) : per;
+        cumulative = round2(cumulative + amount);
         rows.push({
           invoiceId: inv.id,
           kind: 'plan-installment',
           month: addMonths(inv.due_date, k),
-          label: `${inv.description} · ${k + 1}/${inv.installment_count}`,
-          amount: per,
-          paid: k < paidCount,
+          label: `${inv.description} · ${k + 1}/${count}`,
+          amount,
+          // Paid off oldest-first: this installment is settled once the invoice's
+          // paid_amount covers the running total up to and including it.
+          paid: cumulative <= paidAmt + 0.001,
         });
       }
     } else {
