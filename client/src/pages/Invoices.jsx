@@ -51,7 +51,16 @@ export default function Invoices() {
             <thead><tr><th>Description</th><th>Company / Worker</th><th>Vehicle</th><th className="num">Amount</th><th className="num">Paid</th><th>Due</th><th>Source</th><th>Status</th></tr></thead>
             <tbody>{rows.map((i) => (
               <tr key={i.id}>
-                <td>{i.description}</td>
+                <td>
+                  {i.description}
+                  {i.installment_count > 1 && (
+                    <div style={{ marginTop: 3 }}>
+                      <Badge tone="blue">
+                        {Math.min(i.installment_count, Math.round(Number(i.paid_amount) / Number(i.installment_amount || 1)))}/{i.installment_count} installments · {mkd(i.installment_amount)}/mo
+                      </Badge>
+                    </div>
+                  )}
+                </td>
                 <td>{i.company_name || i.worker_name || '—'}</td>
                 <td className="muted">{i.vehicle_plate || '—'}</td>
                 <td className="num">{mkd(i.amount)} <EurBadge currency={i.currency} original={i.original_amount} /></td>
@@ -129,9 +138,8 @@ function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
 
       {n > 1 && total > 0 && (
         <div className="preview-box">
-          Creates <b>{n} monthly invoices</b> of <b>{new Intl.NumberFormat('mk-MK').format(per)} {f.currency === 'EUR' ? '€' : 'ден'}</b> each
-          {f.currency === 'EUR' ? ' (converted to MKD)' : ''}, due monthly from <b>{monthsFrom(f.due_date, 0)}</b> through <b>{monthsFrom(f.due_date, n - 1)}</b>.
-          <div className="muted" style={{ marginTop: 4 }}>Total {new Intl.NumberFormat('mk-MK').format(total)} {f.currency === 'EUR' ? '€' : 'ден'} · each closes via FIFO oldest-first.</div>
+          One invoice for the full <b>{new Intl.NumberFormat('mk-MK').format(total)} {f.currency === 'EUR' ? '€' : 'ден'}</b>, payable in <b>{n} monthly installments</b> of about <b>{new Intl.NumberFormat('mk-MK').format(per)} {f.currency === 'EUR' ? '€' : 'ден'}</b> each.
+          <div className="muted" style={{ marginTop: 4 }}>Record a payment of ~{new Intl.NumberFormat('mk-MK').format(per)} each month — the balance owed to this company goes down automatically.</div>
         </div>
       )}
     </Modal>

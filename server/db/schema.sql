@@ -280,6 +280,11 @@ CREATE INDEX IF NOT EXISTS idx_sysnotif_open ON system_notifications (resolved, 
 ALTER TABLE invoices        ADD COLUMN IF NOT EXISTS remaining NUMERIC(12,2) GENERATED ALWAYS AS (amount - paid_amount) VIRTUAL;
 ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS remaining NUMERIC(12,2) GENERATED ALWAYS AS (amount - paid_amount) VIRTUAL;
 
+-- Installment plan on a single invoice: one supplier invoice for the full amount,
+-- paid off over installment_count monthly payments of installment_amount each.
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS installment_count  INT;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS installment_amount NUMERIC(12,2);
+
 -- ===== Derived views =====
 
 CREATE OR REPLACE VIEW company_balances AS

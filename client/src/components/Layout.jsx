@@ -38,6 +38,10 @@ export default function Layout({ children }) {
   const [results, setResults] = useState(null);
   const [theme, setTheme] = useState(getTheme());
   const [fabOpen, setFabOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false); // mobile drawer
+
+  // close the mobile drawer whenever the route changes
+  useEffect(() => { setNavOpen(false); }, [loc.pathname]);
 
   useEffect(() => { api.get('/reminders').then(setReminders).catch(() => {}); }, [activeTenant]);
   useEffect(() => {
@@ -51,7 +55,8 @@ export default function Layout({ children }) {
 
   return (
     <div className="shell" onClick={() => { setMenuOpen(false); setBellOpen(false); setUserOpen(false); setFabOpen(false); }}>
-      <aside className="sidebar">
+      {navOpen && <div className="sidebar-backdrop" onClick={(e) => { e.stopPropagation(); setNavOpen(false); }} />}
+      <aside className={`sidebar ${navOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="brand-lockup">
           <div className="brand-mark"><Ic.Bolt width={20} height={20} /></div>
           <div>
@@ -104,6 +109,9 @@ export default function Layout({ children }) {
 
       <div className="main">
         <header className="topbar" onClick={(e) => e.stopPropagation()}>
+          <button className="icon-btn hamburger" title="Menu" onClick={() => setNavOpen((v) => !v)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+          </button>
           <div className="search">
             <span className="mag"><Ic.Search width={17} height={17} /></span>
             <input className="input" placeholder="Search plate, company, invoice…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -122,7 +130,7 @@ export default function Layout({ children }) {
 
           <div style={{ flex: 1 }} />
 
-          <button className="icon-btn" title="Toggle theme" onClick={() => { const t = toggleTheme(); setTheme(t); }}>
+          <button className="icon-btn theme-toggle" title="Toggle theme" onClick={() => { const t = toggleTheme(); setTheme(t); }}>
             {theme === 'dark' ? <Ic.Sun /> : <Ic.Moon />}
           </button>
 
@@ -144,7 +152,7 @@ export default function Layout({ children }) {
           <div className="tenant-switch">
             <div className="tenant-btn" onClick={() => setMenuOpen((v) => !v)}>
               <div className="avatar" style={{ width: 26, height: 26, borderRadius: 8, fontSize: 11 }}>{initials}</div>
-              <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTenant?.name}</span>
+              <span className="tenant-name" style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTenant?.name}</span>
               <Ic.ChevronDown width={16} height={16} className="muted" />
             </div>
             {menuOpen && (

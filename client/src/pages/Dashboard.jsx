@@ -67,7 +67,7 @@ export default function Dashboard() {
         <Kpi i={3} icon={Ic.Dollar} tone={d.netProfit >= 0 ? 'brand' : 'neg'} label="Net profit" value={mkd(d.netProfit)} delta={marginPct} deltaLabel="margin" />
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: '2fr 1fr', marginBottom: 16 }}>
+      <div className="cols-2" style={{ marginBottom: 16 }}>
         <div className="card pad rise" style={{ animationDelay: '180ms' }}>
           <div className="card-title">Cash flow <span className="sub">· last 30 days</span></div>
           <ResponsiveContainer width="100%" height={260}>
@@ -93,7 +93,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 16 }}>
+      <div className="cols-2e" style={{ marginBottom: 16 }}>
         <MiniStat wide icon={Ic.Truck} tone="brand" label="Fleet lease debt" value={mkd(d.leaseDebt)} onClick={() => nav('/vehicles')} />
         <div className="card pad" style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           {d.bestVehicle ? (
@@ -115,7 +115,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+      <div className="cols-3">
         <ListCard title="Top companies you owe" icon={Ic.Building} rows={d.topOwed} valueKey="open_balance" onRow={(c) => nav(`/companies/${c.id}`)} />
         <ListCard title="Clients who owe you" icon={Ic.Users} rows={d.topOwing} valueKey="outstanding_balance" onRow={(c) => nav(`/companies/${c.id}`)} />
         <div className="card pad">
