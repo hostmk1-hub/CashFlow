@@ -104,6 +104,50 @@ export async function create(tenantId, input) {
 }
 
 /**
+ * Edit a lease plan's details — leasing company, contract number, car price,
+ * amounts, term. Keeps the generated installment invoices in sync: they move to
+ * the new leasing company, and the monthly amount is updated on installments
+ * that are still fully unpaid (paid ones are left untouched). Changing the term
+ * length does not add/remove installments.
+ */
+export async function update(tenantId, planId, input) {
+  const money = toMkd({ amount: input.monthly_amount, currency: input.currency, exchangeRate: input.exchange_rate });
+  const total = toMkd({ amount: input.total_amount, currency: input.currency, exchangeRate: money.exchangeRate });
+  const purchase = input.purchase_price
+    ? toMkd({ amount: input.purchase_price, currency: input.currency, exchangeRate: money.exchangeRate })
+    : null;
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id FROM amortization_plans WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+      [tenantId, planId],
+    );
+    if (!rows[0]) throw new ApiError(404, 'Lease plan not found');
+    const updated = await client.query(
+      `UPDATE amortization_plans SET
+         company_id = $3, total_amount = $4, monthly_amount = $5, months_total = $6,
+         interest_rate = $7, start_date = $8, currency = $9, exchange_rate = $10,
+         purchase_price = $11, lease_number = $12
+       WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+      [tenantId, planId, input.company_id, total.amount, money.amount, input.months_total,
+       input.interest_rate ?? null, input.start_date, money.currency, money.exchangeRate,
+       purchase ? purchase.amount : null, input.lease_number || null],
+    );
+    // Move the generated installment invoices to the (possibly new) leasing company.
+    await client.query(
+      `UPDATE invoices SET company_id = $3 WHERE tenant_id = $1 AND amort_plan_id = $2`,
+      [tenantId, planId, input.company_id],
+    );
+    // Update the monthly amount only on installments nobody has paid yet.
+    await client.query(
+      `UPDATE invoices SET amount = $3, original_amount = $4, currency = $5, exchange_rate = $6
+       WHERE tenant_id = $1 AND amort_plan_id = $2 AND paid_amount = 0`,
+      [tenantId, planId, money.amount, money.originalAmount ?? null, money.currency, money.exchangeRate],
+    );
+    return updated.rows[0];
+  });
+}
+
+/**
  * Delete a lease/amortization plan and its generated installment invoices —
  * but only if none of those installments have been paid. Paid installments must
  * have their payments removed first, so nothing is silently orphaned.

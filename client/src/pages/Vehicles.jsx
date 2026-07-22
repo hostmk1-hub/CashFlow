@@ -34,6 +34,12 @@ export default function Vehicles() {
   const [rows, setRows] = useState(null);
   const [editing, setEditing] = useState(null);
   const [sort, setSort] = useState('plate');
+  async function del(v, e) {
+    e.stopPropagation();
+    if (!confirm(`Delete vehicle ${v.plate}? This can't be undone.`)) return;
+    try { await api.del(`/vehicles/${v.id}`); load(); }
+    catch (err) { alert(err.message); }
+  }
   const [q, setQ] = useState('');
   const [lease, setLease] = useState('');   // '', 'yes', 'no'
   const [leasing, setLeasing] = useState(''); // leasing company name
@@ -81,6 +87,7 @@ export default function Vehicles() {
                 <TableHead className="text-right cursor-pointer" onClick={() => setSort('remaining')}>Remaining lease</TableHead>
                 <TableHead>Lease end</TableHead>
                 <TableHead className="text-right cursor-pointer" onClick={() => setSort('rev_pav')}>RevPAV</TableHead>
+                <TableHead className="text-right"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -96,6 +103,10 @@ export default function Vehicles() {
                   <TableCell className="text-right tabular-nums">{v.remaining != null ? mkd(v.remaining) : '—'}</TableCell>
                   <TableCell className="tabular-nums">{leaseEnd(v)}</TableCell>
                   <TableCell className="text-right tabular-nums">{v.rev_pav != null ? mkd(v.rev_pav) : '—'}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <button className="btn ghost sm" title="Edit vehicle" onClick={(e) => { e.stopPropagation(); setEditing(v); }}>✎</button>
+                    {' '}<button className="btn ghost sm" title="Delete vehicle" onClick={(e) => del(v, e)}>🗑</button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

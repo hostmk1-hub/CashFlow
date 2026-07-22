@@ -1,5 +1,5 @@
 import multer from 'multer';
-import { amortizationSchema, scannedInvoiceDraftSchema } from './validation.js';
+import { amortizationSchema, updateAmortizationSchema, scannedInvoiceDraftSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import { scanAmortization } from '../scanner/service.js';
 import * as service from './service.js';
@@ -12,6 +12,10 @@ export const create = asyncHandler(async (req, res) =>
 
 export const confirm = asyncHandler(async (req, res) =>
   res.status(201).json(await service.confirm(req.tenantId, amortizationSchema.parse(req.body))),
+);
+
+export const update = asyncHandler(async (req, res) =>
+  res.json(await service.update(req.tenantId, Number(req.params.id), updateAmortizationSchema.parse(req.body))),
 );
 
 export const remove = asyncHandler(async (req, res) =>

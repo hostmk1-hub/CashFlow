@@ -14,6 +14,7 @@ export default function VehicleDetail() {
   const [d, setD] = useState(null);
   const [incomeOpen, setIncomeOpen] = useState(false);
   const [amortOpen, setAmortOpen] = useState(false);
+  const [amortEdit, setAmortEdit] = useState(null);
   const [companies, setCompanies] = useState([]);
 
   const load = () => api.get(`/vehicles/${id}`).then(setD).catch(() => {});
@@ -60,7 +61,12 @@ export default function VehicleDetail() {
         <div className="card pad">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 className="card-title" style={{ margin: 0 }}>Amortization</h3>
-            {plan && <button className="btn ghost sm" title="Delete lease plan" style={{ color: 'var(--neg)' }} onClick={() => deleteLease(plan.id)}>🗑 Delete lease</button>}
+            {plan && (
+              <div className="toolbar">
+                <button className="btn ghost sm" title="Edit lease plan" onClick={() => setAmortEdit(plan)}>✎ Edit lease</button>
+                <button className="btn ghost sm" title="Delete lease plan" style={{ color: 'var(--neg)' }} onClick={() => deleteLease(plan.id)}>🗑 Delete</button>
+              </div>
+            )}
           </div>
           {plan ? (
             <>
@@ -134,13 +140,24 @@ export default function VehicleDetail() {
 
       {incomeOpen && <IncomeModal vehicleId={id} onClose={() => setIncomeOpen(false)} onSaved={() => { setIncomeOpen(false); load(); }} />}
       {amortOpen && <AmortizationModal vehicleId={id} companies={companies} onClose={() => setAmortOpen(false)} onSaved={() => { setAmortOpen(false); load(); }} />}
+      {amortEdit && <AmortizationModal plan={amortEdit} vehicleId={id} companies={companies} onClose={() => setAmortEdit(null)} onSaved={() => { setAmortEdit(null); load(); }} />}
     </>
   );
 }
 
-function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
+function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
+  const editing = !!plan;
   const [mode, setMode] = useState('manual'); // manual | scan
-  const [f, setF] = useState({ company_id: '', lease_number: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
+  const [f, setF] = useState(editing
+    ? {
+        company_id: plan.company_id || '', lease_number: plan.lease_number || '',
+        purchase_price: plan.purchase_price ?? '', total_amount: String(plan.total_amount ?? ''),
+        down_payment: plan.down_payment ?? 0, monthly_amount: String(plan.monthly_amount ?? ''),
+        months_total: plan.months_total ?? 12, interest_rate: plan.interest_rate ?? '',
+        start_date: String(plan.start_date).slice(0, 10), currency: plan.currency || 'MKD',
+        generate_invoices: false, down_payment_paid: false,
+      }
+    : { company_id: '', lease_number: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -161,27 +178,36 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
   async function save() {
     setBusy(true); setErr('');
     try {
-      await api.post('/amortization', {
-        vehicle_id: Number(vehicleId), company_id: Number(f.company_id), lease_number: f.lease_number || null,
+      const common = {
+        company_id: Number(f.company_id), lease_number: f.lease_number || null,
         total_amount: Number(f.total_amount), purchase_price: f.purchase_price === '' ? null : Number(f.purchase_price),
-        down_payment: Number(f.down_payment || 0),
         monthly_amount: Number(f.monthly_amount), months_total: Number(f.months_total),
         interest_rate: f.interest_rate === '' ? null : Number(f.interest_rate),
-        start_date: f.start_date, currency: f.currency, generate_invoices: f.generate_invoices,
-        down_payment_paid: f.down_payment_paid,
-      });
+        start_date: f.start_date, currency: f.currency,
+      };
+      if (editing) {
+        await api.put(`/amortization/${plan.id}`, common);
+      } else {
+        await api.post('/amortization', {
+          ...common, vehicle_id: Number(vehicleId), down_payment: Number(f.down_payment || 0),
+          generate_invoices: f.generate_invoices, down_payment_paid: f.down_payment_paid,
+        });
+      }
       onSaved();
     } catch (ex) { setErr(ex.message); setBusy(false); }
   }
 
   return (
-    <Modal title="Amortization Plan" onClose={onClose} wide
-      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy || !f.company_id || !f.monthly_amount} onClick={save}>Create plan + generate installments</button></>}>
+    <Modal title={editing ? 'Edit Lease Plan' : 'Amortization Plan'} onClose={onClose} wide
+      footer={<><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy || !f.company_id || !f.monthly_amount} onClick={save}>{editing ? 'Save changes' : 'Create plan + generate installments'}</button></>}>
       {err && <div className="error-msg">{err}</div>}
+      {editing && <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Editing moves the installments to the selected leasing company; the monthly amount updates on installments that aren’t paid yet. Changing the term length won’t add or remove months.</div>}
+      {!editing && (
       <div className="seg" style={{ marginBottom: 14 }}>
         <button type="button" className={mode === 'manual' ? 'on' : ''} onClick={() => setMode('manual')}>Manual</button>
         <button type="button" className={mode === 'scan' ? 'on' : ''} onClick={() => setMode('scan')}>📷 Scan Document</button>
       </div>
+      )}
       {mode === 'scan' ? (
         <>
           <p className="muted">Upload a photo/PDF of the lease schedule. Gemini extracts the numbers (Cyrillic supported) and pre-fills the form for review — nothing saves until you confirm.</p>

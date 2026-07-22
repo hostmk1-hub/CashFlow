@@ -44,3 +44,18 @@ export const amortizationSchema = z.object({
   // Whether the down payment was prepaid (records it as a settled expense).
   down_payment_paid: z.boolean().default(true),
 });
+
+// Editing an existing lease plan: the vehicle it belongs to doesn't change, and
+// the down payment / invoice generation aren't re-run.
+export const updateAmortizationSchema = z.object({
+  company_id: z.coerce.number().int().positive(),
+  total_amount: z.coerce.number().positive(),
+  purchase_price: z.coerce.number().min(0).nullish(),
+  lease_number: z.string().max(100).nullish(),
+  monthly_amount: z.coerce.number().positive(),
+  months_total: z.coerce.number().int().positive(),
+  interest_rate: z.coerce.number().min(0).nullish(),
+  start_date: z.string().min(1),
+  currency: currencyEnum,
+  exchange_rate: z.coerce.number().positive().optional(),
+});
