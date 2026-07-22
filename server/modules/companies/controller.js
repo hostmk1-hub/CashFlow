@@ -3,7 +3,8 @@ import { createCompanySchema, updateCompanySchema } from './validation.js';
 import { asyncHandler, ApiError } from '../../shared/http.js';
 import * as service from './service.js';
 import { parseInvoiceList, reconcile } from './reconcile.js';
-import { scanInvoiceListDocument } from '../../services/geminiService.js';
+import { scanInvoiceListDocument, reconciliationReport } from '../../services/geminiService.js';
+import * as notifications from '../notifications/repository.js';
 
 export const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 
@@ -59,6 +60,42 @@ export const reconcileUpload = asyncHandler(async (req, res) => {
         : 'Could not read any invoices from the file (expected an invoice-number column)',
     );
   }
-  const result = await reconcile(req.tenantId, Number(req.params.id), uploaded);
-  res.json({ ...result, source: viaAI ? 'ai' : 'file' });
+  const companyId = Number(req.params.id);
+  const result = await reconcile(req.tenantId, companyId, uploaded);
+
+  // AI narrative for EVERY reconciliation (spreadsheet or photo) — Gemini writes
+  // the plain-language report of what's missing / incorrect / totals & paid
+  // mismatches. Best-effort: if Gemini isn't configured or fails, we still return
+  // the structured result so the check always works.
+  const company = await service.getById(req.tenantId, companyId).catch(() => null);
+  const companyName = company?.name || `#${companyId}`;
+  let aiReport = null;
+  try {
+    aiReport = await reconciliationReport(req.tenantId, { companyName, result });
+  } catch (e) {
+    console.warn('[reconcile] AI report skipped:', e.message);
+    aiReport = { report: '', ok: null, error: e.status === 400 ? 'no-key' : 'failed' };
+  }
+
+  // Notify the admin dashboard when there's anything to look at.
+  const hasIssues =
+    result.missingInSystem.length || result.mismatches.length ||
+    !result.totals.match || !result.paid.match;
+  if (hasIssues) {
+    const parts = [];
+    if (result.missingInSystem.length) parts.push(`${result.missingInSystem.length} missing in our system`);
+    if (result.mismatches.length) parts.push(`${result.mismatches.length} amount/status diffs`);
+    if (!result.totals.match) parts.push(`totals off by ${result.totals.difference}`);
+    if (!result.paid.match) parts.push(`paid off by ${result.paid.difference}`);
+    await notifications
+      .create({
+        level: 'warning',
+        title: `Reconciliation issues — ${companyName}`,
+        message: aiReport?.report || parts.join('; '),
+        context: { tenantId: req.tenantId, companyId, source: viaAI ? 'ai' : 'file', summary: parts },
+      })
+      .catch((e) => console.warn('[reconcile] notify failed:', e.message));
+  }
+
+  res.json({ ...result, source: viaAI ? 'ai' : 'file', aiReport });
 });

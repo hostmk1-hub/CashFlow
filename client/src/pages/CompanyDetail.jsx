@@ -144,14 +144,46 @@ function ReconcileModal({ companyId, companyName, onClose }) {
                 <div className="card stat"><div className="label">Matched</div><div className="value" style={{ color: 'var(--pos)' }}>{report.matchedCount}</div></div>
               </div>
 
+              {report.aiReport?.report && (
+                <div className="card pad" style={{ marginBottom: 14, borderLeft: `3px solid ${report.aiReport.ok ? 'var(--pos)' : 'var(--accent, #6366f1)'}` }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>🤖 AI извештај</span>
+                    {report.aiReport.ok === true && <Badge tone="green">Сè се совпаѓа</Badge>}
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5 }}>{report.aiReport.report}</div>
+                </div>
+              )}
+              {report.aiReport && !report.aiReport.report && report.aiReport.error === 'no-key' && (
+                <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>AI report skipped — add a Gemini API key in Settings to get a written summary.</div>
+              )}
+
               {report.totals && (
                 <div className="card pad" style={{ marginBottom: 14, borderLeft: `3px solid ${report.totals.match ? 'var(--pos)' : 'var(--neg)'}` }}>
+                  <div className="muted" style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>INVOICE TOTALS</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, justifyContent: 'space-between', alignItems: 'flex-end' }}>
                     <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>THEIR TOTAL</div><div style={{ fontSize: 20, fontWeight: 700 }}>{mkd(report.totals.theirTotal)}</div></div>
                     <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>OUR TOTAL</div><div style={{ fontSize: 20, fontWeight: 700 }}>{mkd(report.totals.ourTotal)}</div></div>
                     <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>DIFFERENCE</div><div style={{ fontSize: 20, fontWeight: 700, color: report.totals.match ? 'var(--pos)' : 'var(--neg)' }}>{report.totals.difference > 0 ? '+' : ''}{mkd(report.totals.difference)}</div></div>
                     <Badge tone={report.totals.match ? 'green' : 'red'}>{report.totals.match ? 'Totals match ✓' : 'Totals differ'}</Badge>
                   </div>
+                </div>
+              )}
+
+              {report.paid && (
+                <div className="card pad" style={{ marginBottom: 14, borderLeft: `3px solid ${report.paid.match ? 'var(--pos)' : 'var(--neg)'}` }}>
+                  <div className="muted" style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>PAID TO COMPANY (their statement vs our records)</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>THEY MARK PAID</div><div style={{ fontSize: 20, fontWeight: 700 }}>{mkd(report.paid.theirPaid)}</div></div>
+                    <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>WE RECORDED PAID</div><div style={{ fontSize: 20, fontWeight: 700 }}>{mkd(report.paid.ourPaid)}</div></div>
+                    <div><div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>DIFFERENCE</div><div style={{ fontSize: 20, fontWeight: 700, color: report.paid.match ? 'var(--pos)' : 'var(--neg)' }}>{report.paid.difference > 0 ? '+' : ''}{mkd(report.paid.difference)}</div></div>
+                    <Badge tone={report.paid.match ? 'green' : 'red'}>{report.paid.match ? 'Paid matches ✓' : 'Paid differs'}</Badge>
+                  </div>
+                  {report.paid.ourPaidToCompany != null && (
+                    <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                      Total paid to this company on our books: <b>{mkd(report.paid.ourPaidToCompany)}</b>
+                      {report.paid.ourOpenBalance != null && <> · still owed: <b>{mkd(report.paid.ourOpenBalance)}</b></>}
+                    </div>
+                  )}
                 </div>
               )}
 

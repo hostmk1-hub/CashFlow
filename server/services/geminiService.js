@@ -69,12 +69,26 @@ async function requestOnce({ apiKey, model, prompt, file }) {
   return resp;
 }
 
+async function requestText({ apiKey, model, prompt, json = false }) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
+  };
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * Runs the request against the free key first; on failure (429 quota/rate-limit,
  * 401/403 auth, or 5xx) falls through to the paid key. Only the last error is
- * surfaced if every key fails.
+ * surfaced if every key fails. `requester` builds the fetch for a given key so
+ * both the vision (file) and text-only paths share the fallback logic.
  */
-async function callVision({ tenantId, model, prompt, file }) {
+async function callWithFallback({ tenantId, requester }) {
   const keys = await resolveKeys(tenantId);
   if (!keys.length) {
     const err = new Error('No Gemini API key configured. Add one in Settings → AI Integration.');
@@ -84,7 +98,7 @@ async function callVision({ tenantId, model, prompt, file }) {
   let lastErr = null;
   for (const { key, tier } of keys) {
     try {
-      const resp = await requestOnce({ apiKey: key, model, prompt, file });
+      const resp = await requester(key);
       if (resp.ok) {
         const json = await resp.json();
         const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
@@ -101,6 +115,14 @@ async function callVision({ tenantId, model, prompt, file }) {
     }
   }
   throw lastErr;
+}
+
+function callVision({ tenantId, model, prompt, file }) {
+  return callWithFallback({ tenantId, requester: (apiKey) => requestOnce({ apiKey, model, prompt, file }) });
+}
+
+function callText({ tenantId, model, prompt, json = false }) {
+  return callWithFallback({ tenantId, requester: (apiKey) => requestText({ apiKey, model, prompt, json }) });
 }
 
 export async function scanInvoiceDocument(tenantId, file) {
@@ -178,6 +200,38 @@ export async function listModels(tenantId) {
   } catch (err) {
     return { ok: false, reason: err.message, models: [] };
   }
+}
+
+/**
+ * Have Gemini write a short plain-language reconciliation report from the
+ * structured result (runs for every reconciliation — spreadsheet or photo —
+ * so the AI always does the comparison narrative). Returns { report } text in
+ * Macedonian. Best-effort: throws if no key / Gemini fails, callers catch.
+ */
+export async function reconciliationReport(tenantId, { companyName, result }) {
+  const model = await resolveModel(tenantId);
+  // Trim the payload so the prompt stays small even for long lists.
+  const compact = {
+    company: companyName,
+    counts: { theirList: result.uploadedCount, ourSystem: result.systemCount, matched: result.matchedCount },
+    totals: result.totals,
+    paid: result.paid,
+    missingInSystem: (result.missingInSystem || []).slice(0, 60).map((r) => ({ n: r.invoice_number, a: r.amount, s: r.status })),
+    amountOrStatusDiffs: (result.mismatches || []).slice(0, 60).map((m) => ({ n: m.invoice_number, issues: m.issues })),
+    onlyInOurSystem: (result.extraInSystem || []).slice(0, 60).map((r) => ({ n: r.invoice_number, a: Number(r.amount), s: r.status })),
+  };
+  const prompt =
+    'Ти си сметководствен асистент. Врз основа на овој JSON резултат од споредба на ' +
+    'фактури меѓу листата од добавувачот и нашиот систем, напиши краток јасен извештај ' +
+    'на МАКЕДОНСКИ (кирилица). Наведи: кои фактури недостасуваат кај нас, каде има разлика ' +
+    'во износ или статус (плати/неплатено), дали вкупните износи се совпаѓаат (нивниот наспроти нашиот), ' +
+    'и дали платеното кон компанијата се совпаѓа со нашите финансиски записи. Биди концизен, ' +
+    'користи ставки со црти (-). Ако сè се совпаѓа, кажи го тоа јасно. ' +
+    'Врати ЧИСТ JSON: {"report":"...","ok":true|false} каде ok=true само ако нема никакви разлики. ' +
+    'Податоци: ' + JSON.stringify(compact);
+  const out = await callText({ tenantId, model, prompt, json: true });
+  const report = typeof out?.report === 'string' ? out.report : (out?._raw || '');
+  return { report: report.trim(), ok: out?.ok === true };
 }
 
 export async function testConnection(tenantId) {
