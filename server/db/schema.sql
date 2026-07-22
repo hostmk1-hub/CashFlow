@@ -285,6 +285,13 @@ ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS remaining NUMERIC(12,2) GEN
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS installment_count  INT;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS installment_amount NUMERIC(12,2);
 
+-- Per-expense category (leasing | insurance | repairs | service | tires | other).
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS category VARCHAR(30);
+
+-- Car's real cash/purchase price (MKD-equivalent) so the leasing markup can be
+-- shown: lease total_amount - purchase_price = what the leasing company charges.
+ALTER TABLE amortization_plans ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(14,2);
+
 -- ===== Derived views =====
 
 CREATE OR REPLACE VIEW company_balances AS

@@ -21,16 +21,19 @@ export async function create(tenantId, input) {
   });
   const total = toMkd({ amount: input.total_amount, currency: input.currency, exchangeRate: money.exchangeRate });
   const down = toMkd({ amount: input.down_payment || 0, currency: input.currency, exchangeRate: money.exchangeRate });
+  const purchase = input.purchase_price
+    ? toMkd({ amount: input.purchase_price, currency: input.currency, exchangeRate: money.exchangeRate })
+    : null;
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO amortization_plans
         (tenant_id, vehicle_id, company_id, total_amount, down_payment, monthly_amount,
-         months_total, interest_rate, start_date, scan_url, currency, exchange_rate)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+         months_total, interest_rate, start_date, scan_url, currency, exchange_rate, purchase_price)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [tenantId, input.vehicle_id, input.company_id, total.amount, down.amount,
        money.amount, input.months_total, input.interest_rate ?? null, input.start_date,
-       input.scan_url || null, money.currency, money.exchangeRate],
+       input.scan_url || null, money.currency, money.exchangeRate, purchase ? purchase.amount : null],
     );
     const plan = rows[0];
 
@@ -47,6 +50,7 @@ export async function create(tenantId, input) {
             amount: money.amount,
             due_date: addMonths(input.start_date, m),
             source: 'amortization',
+            category: 'leasing',
             currency: money.currency,
             original_amount: money.originalAmount,
             exchange_rate: money.exchangeRate,
@@ -75,6 +79,7 @@ export async function create(tenantId, input) {
           amount: down.amount,
           due_date: input.start_date,
           source: 'amortization',
+          category: 'leasing',
           currency: down.currency,
           original_amount: down.originalAmount,
           exchange_rate: down.exchangeRate,

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { currencyEnum } from './index.js';
 
+export const EXPENSE_CATEGORIES = ['leasing', 'insurance', 'repairs', 'service', 'tires', 'other'];
+export const expenseCategoryEnum = z.enum(EXPENSE_CATEGORIES).nullish();
+
 export const createInvoiceSchema = z
   .object({
     company_id: z.coerce.number().int().positive().nullish(),
@@ -14,6 +17,7 @@ export const createInvoiceSchema = z
     currency: currencyEnum,
     exchange_rate: z.coerce.number().positive().optional(),
     source: z.enum(['manual', 'recurring', 'amortization', 'salary', 'scanned']).default('manual'),
+    category: expenseCategoryEnum,
     // Split the amount into N monthly installments (1 = a single invoice).
     installments: z.coerce.number().int().min(1).max(360).default(1),
   })
@@ -27,6 +31,7 @@ export const invoiceFiltersSchema = z.object({
   vehicle_id: z.coerce.number().int().positive().optional(),
   status: z.enum(['open', 'partial', 'paid']).optional(),
   source: z.enum(['manual', 'recurring', 'amortization', 'salary', 'scanned']).optional(),
+  category: z.enum(['leasing', 'insurance', 'repairs', 'service', 'tires', 'other']).optional(),
   currency: z.enum(['MKD', 'EUR']).optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),

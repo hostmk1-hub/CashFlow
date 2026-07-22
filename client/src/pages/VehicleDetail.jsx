@@ -60,13 +60,20 @@ export default function VehicleDetail() {
               </div>
               <div className="muted" style={{ fontSize: 13 }}>{paidPct}% paid off</div>
               <div className="grid row2" style={{ marginTop: 12, fontSize: 13 }}>
-                <div>Total: <b>{mkd(plan.total_amount)}</b> <EurBadge currency={plan.currency} /></div>
+                {plan.purchase_price != null && <div>Car price (cash): <b>{mkd(plan.purchase_price)}</b></div>}
+                <div>Lease total: <b>{mkd(plan.total_amount)}</b> <EurBadge currency={plan.currency} /></div>
                 <div>Monthly: <b>{mkd(plan.monthly_amount)}</b></div>
                 <div>Remaining: <b>{mkd(prog?.remaining || 0)}</b></div>
                 <div>Installments left: <b>{prog?.installments_left ?? '—'}</b></div>
                 <div>Years left: <b>{prog?.years_left ?? '—'}</b></div>
                 <div>Leasing: <b>{plan.company_name}</b></div>
               </div>
+              {plan.purchase_price != null && Number(plan.purchase_price) > 0 && (
+                <div className="preview-box" style={{ marginTop: 12 }}>
+                  Leasing cost (markup over cash price): <b className="tone-warn">{mkd(Number(plan.total_amount) - Number(plan.purchase_price))}</b>
+                  {' '}· <b>{Math.round(((Number(plan.total_amount) - Number(plan.purchase_price)) / Number(plan.purchase_price)) * 100)}%</b>
+                </div>
+              )}
             </>
           ) : <div className="muted">No amortization plan. Add one from the API or scanner.</div>}
         </div>
@@ -121,7 +128,7 @@ export default function VehicleDetail() {
 
 function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
   const [mode, setMode] = useState('manual'); // manual | scan
-  const [f, setF] = useState({ company_id: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
+  const [f, setF] = useState({ company_id: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -144,7 +151,8 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
     try {
       await api.post('/amortization', {
         vehicle_id: Number(vehicleId), company_id: Number(f.company_id),
-        total_amount: Number(f.total_amount), down_payment: Number(f.down_payment || 0),
+        total_amount: Number(f.total_amount), purchase_price: f.purchase_price === '' ? null : Number(f.purchase_price),
+        down_payment: Number(f.down_payment || 0),
         monthly_amount: Number(f.monthly_amount), months_total: Number(f.months_total),
         interest_rate: f.interest_rate === '' ? null : Number(f.interest_rate),
         start_date: f.start_date, currency: f.currency, generate_invoices: f.generate_invoices,
@@ -172,9 +180,17 @@ function AmortizationModal({ vehicleId, companies, onClose, onSaved }) {
         <>
           <Field label="Leasing company"><select className="select" value={f.company_id} onChange={set('company_id')}><option value="">Select…</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
           <div className="row2">
-            <Field label="Total amount"><input className="input" type="number" value={f.total_amount} onChange={set('total_amount')} /></Field>
+            <Field label="Car purchase price (cash)"><input className="input" type="number" value={f.purchase_price} onChange={set('purchase_price')} placeholder="what the car actually costs" /></Field>
             <Field label="Currency"><CurrencyToggle value={f.currency} onChange={(c) => setF({ ...f, currency: c })} /></Field>
           </div>
+          <Field label="Lease total (down + all installments)"><input className="input" type="number" value={f.total_amount} onChange={set('total_amount')} /></Field>
+          {Number(f.purchase_price) > 0 && Number(f.total_amount) > 0 && (
+            <div className="preview-box">
+              Leasing company charges <b>{new Intl.NumberFormat('mk-MK').format(Number(f.total_amount) - Number(f.purchase_price))} {f.currency === 'EUR' ? '€' : 'ден'}</b> over the cash price
+              {' '}(<b>{Math.round(((Number(f.total_amount) - Number(f.purchase_price)) / Number(f.purchase_price)) * 100)}%</b> markup).
+              <div className="muted" style={{ marginTop: 4 }}>Car {new Intl.NumberFormat('mk-MK').format(Number(f.purchase_price))} · Lease total {new Intl.NumberFormat('mk-MK').format(Number(f.total_amount))} {f.currency === 'EUR' ? '€' : 'ден'}</div>
+            </div>
+          )}
           <div className="row2">
             <Field label="First / down payment"><input className="input" type="number" value={f.down_payment} onChange={set('down_payment')} placeholder="0" /></Field>
             <Field label="Monthly installment"><input className="input" type="number" value={f.monthly_amount} onChange={set('monthly_amount')} /></Field>

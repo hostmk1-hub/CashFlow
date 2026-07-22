@@ -8,7 +8,7 @@ export default function Invoices() {
   const [companies, setCompanies] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [workers, setWorkers] = useState([]);
-  const [filters, setFilters] = useState({ status: '', currency: '', source: '' });
+  const [filters, setFilters] = useState({ status: '', currency: '', source: '', category: '' });
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
 
@@ -40,6 +40,9 @@ export default function Invoices() {
         <select className="select" style={{ width: 150 }} value={filters.source} onChange={(e) => setFilters({ ...filters, source: e.target.value })}>
           <option value="">All sources</option>{['manual', 'recurring', 'amortization', 'salary', 'scanned'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select className="select" style={{ width: 150 }} value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}>
+          <option value="">All categories</option>{['leasing', 'insurance', 'repairs', 'service', 'tires', 'other'].map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+        </select>
         <select className="select" style={{ width: 130 }} value={filters.currency} onChange={(e) => setFilters({ ...filters, currency: e.target.value })}>
           <option value="">All currencies</option><option value="MKD">MKD</option><option value="EUR">EUR</option>
         </select>
@@ -48,7 +51,7 @@ export default function Invoices() {
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No invoices match.</Empty> : (
         <div className="card table-wrap">
           <table className="tbl">
-            <thead><tr><th>Description</th><th>Company / Worker</th><th>Vehicle</th><th className="num">Amount</th><th className="num">Paid</th><th>Due</th><th>Source</th><th>Status</th></tr></thead>
+            <thead><tr><th>Description</th><th>Company / Worker</th><th>Vehicle</th><th>Category</th><th className="num">Amount</th><th className="num">Paid</th><th>Due</th><th>Source</th><th>Status</th></tr></thead>
             <tbody>{rows.map((i) => (
               <tr key={i.id}>
                 <td>
@@ -63,6 +66,7 @@ export default function Invoices() {
                 </td>
                 <td>{i.company_name || i.worker_name || '—'}</td>
                 <td className="muted">{i.vehicle_plate || '—'}</td>
+                <td>{i.category ? <Badge tone={i.category === 'leasing' ? 'blue' : i.category === 'insurance' ? 'yellow' : i.category === 'repairs' ? 'red' : 'gray'}>{i.category}</Badge> : <span className="muted">—</span>}</td>
                 <td className="num">{mkd(i.amount)} <EurBadge currency={i.currency} original={i.original_amount} /></td>
                 <td className="num">{mkd(i.paid_amount)}</td>
                 <td className="muted">{date(i.due_date)}</td>
@@ -81,9 +85,10 @@ export default function Invoices() {
 }
 
 const INSTALLMENT_PRESETS = [1, 3, 6, 12, 24];
+const CATEGORIES = ['leasing', 'insurance', 'repairs', 'service', 'tires', 'other'];
 
 function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
-  const [f, setF] = useState({ target: 'company', company_id: '', worker_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', due_date: new Date().toISOString().slice(0, 10), installments: 1 });
+  const [f, setF] = useState({ target: 'company', company_id: '', worker_id: '', vehicle_id: '', description: '', amount: '', currency: 'MKD', due_date: new Date().toISOString().slice(0, 10), installments: 1, category: '' });
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
@@ -97,7 +102,7 @@ function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
     try {
       const body = {
         description: f.description, amount: Number(f.amount), currency: f.currency, due_date: f.due_date,
-        vehicle_id: f.vehicle_id || null, installments: n,
+        vehicle_id: f.vehicle_id || null, installments: n, category: f.category || null,
         ...(f.target === 'company' ? { company_id: Number(f.company_id) } : { worker_id: Number(f.worker_id) }),
       };
       await api.post('/invoices', body);
@@ -119,7 +124,10 @@ function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
       ) : (
         <Field label="Worker"><select className="select" value={f.worker_id} onChange={set('worker_id')}><option value="">Select…</option>{workers.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></Field>
       )}
-      <Field label="Vehicle (optional)"><select className="select" value={f.vehicle_id} onChange={set('vehicle_id')}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>
+      <div className="row2">
+        <Field label="Vehicle (optional)"><select className="select" value={f.vehicle_id} onChange={set('vehicle_id')}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>
+        <Field label="Category"><select className="select" value={f.category} onChange={set('category')}><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</select></Field>
+      </div>
       <Field label="Description"><input className="input" value={f.description} onChange={set('description')} /></Field>
       <div className="row2">
         <Field label="Amount"><input className="input" type="number" value={f.amount} onChange={set('amount')} /></Field>

@@ -17,7 +17,7 @@ export default function Settings() {
   const [letterhead, setLetterhead] = useState({ company_name: '', company_address: '', company_phone: '' });
   const [rentalsystKey, setRentalsystKey] = useState('');
   const canManage = ['owner', 'admin'].includes(activeTenant?.role);
-  const EXPENSE_CATEGORIES = ['Leasing', 'Service', 'Tires', 'Other'];
+  const EXPENSE_CATEGORIES = ['Leasing', 'Insurance', 'Repairs', 'Service', 'Tires', 'Other'];
 
   const load = () => {
     api.get('/settings').then((s) => {

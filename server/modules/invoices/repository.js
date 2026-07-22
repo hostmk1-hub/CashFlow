@@ -18,6 +18,7 @@ export function list(tenantId, f = {}) {
   if (f.vehicle_id) add('i.vehicle_id = ?', f.vehicle_id);
   if (f.status) add('i.status = ?', f.status);
   if (f.source) add('i.source = ?', f.source);
+  if (f.category) add('i.category = ?', f.category);
   if (f.currency) add('i.currency = ?', f.currency);
   if (f.date_from) add('i.due_date >= ?', f.date_from);
   if (f.date_to) add('i.due_date <= ?', f.date_to);
@@ -53,14 +54,14 @@ export function create(tenantId, d, client = null) {
       `INSERT INTO invoices
         (tenant_id, company_id, worker_id, vehicle_id, amort_plan_id, invoice_number,
          description, amount, due_date, status, source, currency, original_amount, exchange_rate,
-         scanned, scan_url, installment_count, installment_amount)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+         scanned, scan_url, installment_count, installment_amount, category)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         tenantId, d.company_id || null, d.worker_id || null, d.vehicle_id || null,
         d.amort_plan_id || null, d.invoice_number || null, d.description, d.amount, d.due_date,
         d.source || 'manual', d.currency || 'MKD', d.original_amount || null,
         d.exchange_rate || 1, d.scanned || false, d.scan_url || null,
-        d.installment_count || null, d.installment_amount || null,
+        d.installment_count || null, d.installment_amount || null, d.category || null,
       ],
     )
     .then((r) => r.rows[0]);
