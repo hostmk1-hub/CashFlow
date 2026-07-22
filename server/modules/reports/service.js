@@ -17,7 +17,7 @@ const DUE_NOW_EXPR = `
           CASE WHEN due_date > CURRENT_DATE THEN 0
                ELSE (EXTRACT(YEAR FROM age(CURRENT_DATE, due_date)) * 12
                      + EXTRACT(MONTH FROM age(CURRENT_DATE, due_date)))::int + 1 END
-        ) * COALESCE(installment_amount, amount / installment_count) - paid_amount
+        ) * ROUND(amount / installment_count) - paid_amount
       ))
   END`;
 

@@ -109,7 +109,7 @@ function AddInvoiceModal({ companies, vehicles, workers, onClose, onSaved }) {
 
   const n = Math.max(1, Number(f.installments) || 1);
   const total = Number(f.amount) || 0;
-  const per = n > 1 ? Math.round((total / n) * 100) / 100 : total;
+  const per = n > 1 ? Math.round(total / n) : total;
   function monthsFrom(dateStr, k) { const d = new Date(dateStr); d.setMonth(d.getMonth() + k); return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); }
 
   async function save() {
@@ -238,7 +238,7 @@ function ScanModal({ companies, vehicles, onClose, onSaved }) {
           </Field>
           {inst > 1 && Number(draft.amount) > 0 && (
             <div className="preview-box">
-              One invoice for the full <b>{new Intl.NumberFormat('mk-MK').format(Number(draft.amount))} {draft.currency === 'EUR' ? '€' : 'ден'}</b>, payable in <b>{inst} monthly installments</b> of about <b>{new Intl.NumberFormat('mk-MK').format(Math.round((Number(draft.amount) / inst) * 100) / 100)} {draft.currency === 'EUR' ? '€' : 'ден'}</b> each. Mark each month paid from the company’s Installments tab.
+              One invoice for the full <b>{new Intl.NumberFormat('mk-MK').format(Number(draft.amount))} {draft.currency === 'EUR' ? '€' : 'ден'}</b>, payable in <b>{inst} monthly installments</b> of about <b>{new Intl.NumberFormat('mk-MK').format(Math.round(Number(draft.amount) / inst))} {draft.currency === 'EUR' ? '€' : 'ден'}</b> each. Mark each month paid from the company’s Installments tab.
             </div>
           )}
         </>

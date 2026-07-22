@@ -56,10 +56,10 @@ export async function installments(tenantId, id) {
     if (inv.installment_count && inv.installment_count > 1) {
       const count = inv.installment_count;
       const total = round2(Number(inv.amount));
-      // Even monthly amount; the LAST installment absorbs the rounding remainder
-      // so the installments sum to the exact full price (e.g. 100 / 3 → 33.33,
-      // 33.33, 33.34 — not 3 × 33.33 = 99.99).
-      const per = round2(Number(inv.installment_amount) || total / count);
+      // Whole-denar monthly amount (denar isn't paid in half-units), and the LAST
+      // installment absorbs the remainder so the installments still sum to the
+      // exact full price — e.g. 71574 / 12 → 5965 × 11 + 5959, not 5964.5 each.
+      const per = Math.round(total / count);
       const paidAmt = Number(inv.paid_amount);
       let cumulative = 0;
       for (let k = 0; k < count; k++) {
