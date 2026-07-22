@@ -134,6 +134,10 @@ export async function scanAmortization(tenantId, file) {
   if (!file) throw new ApiError(400, 'No file uploaded');
   const extracted = await scanAmortizationDocument(tenantId, file);
   const rate = await getEurRate(tenantId);
+  // Match the leasing company from the document so the plan is set up from the
+  // upload alone (Cyrillic↔Latin aware).
+  const companies = (await query(`SELECT id, name FROM companies WHERE tenant_id = $1 AND active = true`, [tenantId])).rows;
+  const matchedCompany = fuzzyCompanyMatch(extracted.vendor_name, companies);
   return {
     total_amount: extracted.total_amount ?? null,
     down_payment: extracted.down_payment ?? 0,
@@ -143,6 +147,9 @@ export async function scanAmortization(tenantId, file) {
     start_date: extracted.start_date ?? null,
     currency: (extracted.currency || 'MKD').toUpperCase() === 'EUR' ? 'EUR' : 'MKD',
     exchange_rate: rate,
+    lease_number: extracted.lease_number ?? null,
+    vendor_name: extracted.vendor_name ?? null,
+    matched_company_id: matchedCompany?.id ?? null,
     _raw: extracted._raw,
   };
 }

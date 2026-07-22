@@ -173,7 +173,9 @@ export async function scanAmortizationDocument(tenantId, file) {
   const prompt =
     'You are a leasing-schedule data extractor. Return ONLY JSON with keys: ' +
     'total_amount (number), down_payment (number), monthly_amount (number), months_total (integer), ' +
-    'interest_rate (number or null), start_date (YYYY-MM-DD), currency (MKD or EUR). ' +
+    'interest_rate (number or null), start_date (YYYY-MM-DD), currency (MKD or EUR), ' +
+    'lease_number (the lease/contract number as printed, or null), ' +
+    'vendor_name (the leasing company / lessor name exactly as printed, or null). ' +
     CYRILLIC_NOTE;
   return callVision({ tenantId, model, prompt, file });
 }

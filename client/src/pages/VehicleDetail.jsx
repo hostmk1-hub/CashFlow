@@ -93,7 +93,12 @@ export default function VehicleDetail() {
                 </div>
               )}
             </>
-          ) : <div className="muted">No amortization plan. Add one from the API or scanner.</div>}
+          ) : (
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <div className="muted" style={{ marginBottom: 10 }}>No lease plan yet. Upload the lease schedule (photo/PDF) and we’ll set up the monthly installments for this car.</div>
+              <button className="btn" onClick={() => setAmortOpen(true)}>+ Add lease plan (upload or manual)</button>
+            </div>
+          )}
         </div>
 
         <div className="card pad">
@@ -160,6 +165,7 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
     : { company_id: '', lease_number: '', purchase_price: '', total_amount: '', down_payment: 0, monthly_amount: '', months_total: 12, interest_rate: '', start_date: new Date().toISOString().slice(0, 10), currency: 'MKD', generate_invoices: true, down_payment_paid: true });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [scanInfo, setScanInfo] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   async function onScan(e) {
@@ -169,8 +175,18 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
     try {
       const fd = new FormData(); fd.append('file', file);
       const draft = await api.upload('/amortization/scan', fd);
-      // pre-fill the manual form with extracted numbers, then let the user review
-      setF((prev) => ({ ...prev, total_amount: draft.total_amount ?? '', down_payment: draft.down_payment ?? 0, monthly_amount: draft.monthly_amount ?? '', months_total: draft.months_total ?? 12, interest_rate: draft.interest_rate ?? '', start_date: draft.start_date ?? prev.start_date, currency: draft.currency || 'MKD' }));
+      // pre-fill the manual form with extracted numbers + detected leasing company,
+      // then let the user review before saving.
+      setF((prev) => ({
+        ...prev,
+        company_id: draft.matched_company_id || prev.company_id,
+        lease_number: draft.lease_number || prev.lease_number,
+        total_amount: draft.total_amount ?? '', down_payment: draft.down_payment ?? 0,
+        monthly_amount: draft.monthly_amount ?? '', months_total: draft.months_total ?? 12,
+        interest_rate: draft.interest_rate ?? '', start_date: draft.start_date ?? prev.start_date,
+        currency: draft.currency || 'MKD',
+      }));
+      setScanInfo({ vendor: draft.vendor_name, matched: !!draft.matched_company_id });
       setMode('manual');
     } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   }
@@ -216,6 +232,15 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
         </>
       ) : (
         <>
+          {scanInfo && (
+            <div className="preview-box" style={{ marginBottom: 12 }}>
+              📄 Read from the uploaded document. {scanInfo.matched
+                ? <>Leasing company matched to <b>the selection below</b> — please double-check.</>
+                : scanInfo.vendor
+                  ? <>Detected leasing company <b>“{scanInfo.vendor}”</b> but no match in your companies — pick it below (or add the company first).</>
+                  : <>Review the numbers below, then confirm.</>}
+            </div>
+          )}
           <div className="row2">
             <Field label="Leasing company"><select className="select" value={f.company_id} onChange={set('company_id')}><option value="">Select…</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
             <Field label="Lease / contract number"><input className="input" value={f.lease_number} onChange={set('lease_number')} placeholder="e.g. LN-2026-00123" /></Field>
@@ -254,7 +279,13 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
             <Field label="Interest rate %"><input className="input" type="number" value={f.interest_rate} onChange={set('interest_rate')} /></Field>
           </div>
           <Field label="Start date"><input className="input" type="date" value={f.start_date} onChange={set('start_date')} /></Field>
-          <Field><label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={f.generate_invoices} onChange={(e) => setF({ ...f, generate_invoices: e.target.checked })} /> Auto-generate monthly installment invoices</label></Field>
+          <Field><label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={f.generate_invoices} onChange={(e) => setF({ ...f, generate_invoices: e.target.checked })} /> Auto-generate monthly installment invoices</label>
+            {f.generate_invoices && Number(f.months_total) > 0 && Number(f.monthly_amount) > 0 && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Creates <b>{Number(f.months_total)}</b> monthly installments of <b>{new Intl.NumberFormat('mk-MK').format(Number(f.monthly_amount))} {f.currency === 'EUR' ? '€' : 'ден'}</b> each, starting {f.start_date}. They’ll show in the Installments tab and the Due Payments report.
+              </div>
+            )}
+          </Field>
         </>
       )}
     </Modal>
