@@ -8,6 +8,7 @@ export default function Settings() {
   const [settings, setSettings] = useState(null);
   const [team, setTeam] = useState([]);
   const [geminiKey, setGeminiKey] = useState('');
+  const [geminiKeyPaid, setGeminiKeyPaid] = useState('');
   const [eurRate, setEurRate] = useState('');
   const [invite, setInvite] = useState({ email: '', role: 'staff' });
   const [inviteLink, setInviteLink] = useState('');
@@ -69,13 +70,20 @@ export default function Settings() {
       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div className="card pad">
           <h3 className="card-title">AI Integration (Gemini)</h3>
-          <Field label="API key (encrypted at rest)">
+          <Field label="Free-tier API key (tried first)">
             <input className="input" type="password" placeholder={settings.gemini_api_key || 'not set'} value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
           </Field>
-          <div className="toolbar">
-            <button className="btn" disabled={!canManage || !geminiKey} onClick={() => saveSetting('gemini_api_key', geminiKey)}>Update Key</button>
+          <div className="toolbar" style={{ marginBottom: 10 }}>
+            <button className="btn" disabled={!canManage || !geminiKey} onClick={() => { saveSetting('gemini_api_key', geminiKey); setGeminiKey(''); }}>Update free key</button>
             <button className="btn ghost" disabled={!canManage} onClick={testGemini}>Test Connection</button>
           </div>
+          <Field label="Paid API key (fallback — used only if the free key fails)">
+            <input className="input" type="password" placeholder={settings.gemini_api_key_paid || 'not set'} value={geminiKeyPaid} onChange={(e) => setGeminiKeyPaid(e.target.value)} />
+          </Field>
+          <div className="toolbar">
+            <button className="btn" disabled={!canManage || !geminiKeyPaid} onClick={() => { saveSetting('gemini_api_key_paid', geminiKeyPaid); setGeminiKeyPaid(''); }}>Update paid key</button>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Scans use the free key first; the paid key is only used when the free one hits its quota/rate limit.</div>
           <Field label="Model (for scanning invoices & autofill)">
             {(() => {
               const current = settings.gemini_model || 'gemini-2.5-flash';

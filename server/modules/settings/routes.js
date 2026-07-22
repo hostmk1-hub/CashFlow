@@ -13,7 +13,7 @@ import { testEmail } from '../../services/emailTemplates.js';
 const router = Router();
 
 // Keys whose stored value is encrypted and must never be returned in plaintext.
-const SECRET_KEYS = new Set(['gemini_api_key', 'rentalsyst_api_key']);
+const SECRET_KEYS = new Set(['gemini_api_key', 'gemini_api_key_paid', 'rentalsyst_api_key']);
 
 router.get(
   '/',

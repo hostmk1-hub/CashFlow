@@ -4,7 +4,7 @@ export function list(tenantId, { q, activeOnly } = {}) {
   const params = [tenantId];
   let sql = `
     SELECT v.*,
-      p.monthly_amount, p.currency AS lease_currency, p.lease_number, p.start_date AS lease_start, p.months_total,
+      p.monthly_amount, p.currency AS lease_currency, p.exchange_rate AS lease_rate, p.lease_number, p.start_date AS lease_start, p.months_total,
       lc.name AS leasing_company,
       prog.remaining, prog.years_left, prog.installments_left,
       pnl.utilization_pct, pnl.rev_pav

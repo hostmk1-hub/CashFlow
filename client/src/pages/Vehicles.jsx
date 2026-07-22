@@ -13,19 +13,42 @@ import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../components/ui
 
 function utilVariant(u) { if (u == null) return 'gray'; return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
 
+// Monthly lease shown in EUR. EUR leases divide by their stored rate (exact);
+// MKD leases approximate with the default 61.8.
+function monthlyEur(v) {
+  if (v.monthly_amount == null) return '—';
+  const rate = v.lease_currency === 'EUR' ? Number(v.lease_rate) || 61.8 : 61.8;
+  const eur = Number(v.monthly_amount) / rate;
+  return '€' + new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 }).format(eur);
+}
+// Lease end month/year, e.g. "07.2029" (start + months_total, the month after the last payment... last payment month).
+function leaseEnd(v) {
+  if (!v.lease_start || !v.months_total) return '—';
+  const d = new Date(v.lease_start);
+  d.setMonth(d.getMonth() + (Number(v.months_total) - 1)); // month of the final installment
+  return String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
+}
+
 export default function Vehicles() {
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
   const [editing, setEditing] = useState(null);
   const [sort, setSort] = useState('plate');
+  const [q, setQ] = useState('');
+  const [lease, setLease] = useState('');   // '', 'yes', 'no'
+  const [leasing, setLeasing] = useState(''); // leasing company name
 
-  const load = () => api.get('/vehicles').then(setRows).catch(() => setRows([]));
-  useEffect(() => { load(); }, []);
+  const load = () => api.get(`/vehicles${q ? '?q=' + encodeURIComponent(q) : ''}`).then(setRows).catch(() => setRows([]));
+  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [q]);
 
-  const sorted = rows ? [...rows].sort((a, b) => {
-    if (sort === 'utilization_pct' || sort === 'rev_pav' || sort === 'remaining') return (Number(b[sort]) || 0) - (Number(a[sort]) || 0);
+  const leasingCompanies = rows ? [...new Set(rows.map((v) => v.leasing_company).filter(Boolean))] : [];
+  const filtered = (rows || []).filter((v) =>
+    (lease === '' || (lease === 'yes' ? v.monthly_amount != null : v.monthly_amount == null)) &&
+    (leasing === '' || v.leasing_company === leasing));
+  const sorted = [...filtered].sort((a, b) => {
+    if (sort === 'rev_pav' || sort === 'remaining') return (Number(b[sort]) || 0) - (Number(a[sort]) || 0);
     return String(a.plate).localeCompare(String(b.plate));
-  }) : [];
+  });
 
   return (
     <>
@@ -33,6 +56,17 @@ export default function Vehicles() {
         <div className="page-title">Vehicles</div>
         <Button onClick={() => setEditing({})}>+ Add Vehicle</Button>
       </div>
+
+      <div className="toolbar" style={{ marginBottom: 14 }}>
+        <input className="input" style={{ maxWidth: 220 }} placeholder="Search plate / make / model…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="select" style={{ width: 150 }} value={lease} onChange={(e) => setLease(e.target.value)}>
+          <option value="">All vehicles</option><option value="yes">Has lease</option><option value="no">No lease</option>
+        </select>
+        <select className="select" style={{ width: 190 }} value={leasing} onChange={(e) => setLeasing(e.target.value)}>
+          <option value="">All leasing companies</option>{leasingCompanies.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No vehicles yet.</Empty> : (
         <Card>
           <Table>
@@ -43,9 +77,9 @@ export default function Vehicles() {
                 <TableHead className="cursor-pointer" onClick={() => setSort('plate')}>Plate</TableHead>
                 <TableHead>Leasing</TableHead>
                 <TableHead>Make / Model</TableHead><TableHead>Year</TableHead>
+                <TableHead className="text-right">Monthly (€)</TableHead>
                 <TableHead className="text-right cursor-pointer" onClick={() => setSort('remaining')}>Remaining lease</TableHead>
-                <TableHead className="text-right">Years left</TableHead>
-                <TableHead className="cursor-pointer" onClick={() => setSort('utilization_pct')}>Utilization</TableHead>
+                <TableHead>Lease end</TableHead>
                 <TableHead className="text-right cursor-pointer" onClick={() => setSort('rev_pav')}>RevPAV</TableHead>
               </TableRow>
             </TableHeader>
@@ -58,9 +92,9 @@ export default function Vehicles() {
                   <TableCell className="text-muted-foreground">{v.leasing_company ? (v.leasing_company.length > 16 ? v.leasing_company.slice(0, 16) + '…' : v.leasing_company) : '—'}</TableCell>
                   <TableCell>{v.make} {v.model}</TableCell>
                   <TableCell className="text-muted-foreground">{v.year}</TableCell>
+                  <TableCell className="text-right tabular-nums">{monthlyEur(v)}</TableCell>
                   <TableCell className="text-right tabular-nums">{v.remaining != null ? mkd(v.remaining) : '—'}</TableCell>
-                  <TableCell className="text-right">{v.years_left ?? '—'}</TableCell>
-                  <TableCell>{v.utilization_pct != null ? <Badge variant={utilVariant(Number(v.utilization_pct))}>{v.utilization_pct}%</Badge> : <span className="text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="tabular-nums">{leaseEnd(v)}</TableCell>
                   <TableCell className="text-right tabular-nums">{v.rev_pav != null ? mkd(v.rev_pav) : '—'}</TableCell>
                 </TableRow>
               ))}

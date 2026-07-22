@@ -19,15 +19,29 @@ export default function Companies() {
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [filters, setFilters] = useState({ q: '', type: '', category: '' });
 
-  const load = () => api.get('/companies').then(setRows).catch(() => setRows([]));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+    api.get(`/companies${qs ? '?' + qs : ''}`).then(setRows).catch(() => setRows([]));
+  };
+  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [filters]);
 
   return (
     <>
       <div className="page-head">
         <div className="page-title">Companies</div>
         <Button onClick={() => setEditing({})}>+ Add Company</Button>
+      </div>
+
+      <div className="toolbar" style={{ marginBottom: 14 }}>
+        <input className="input" style={{ maxWidth: 240 }} placeholder="Search name…" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
+        <select className="select" style={{ width: 150 }} value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
+          <option value="">All types</option><option value="vendor">Vendor</option><option value="client">Client</option><option value="both">Both</option>
+        </select>
+        <select className="select" style={{ width: 150 }} value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}>
+          <option value="">All categories</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+        </select>
       </div>
 
       {!rows ? <Spinner /> : rows.length === 0 ? <Empty>No companies yet.</Empty> : (

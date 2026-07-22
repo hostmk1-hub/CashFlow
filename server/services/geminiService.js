@@ -6,19 +6,33 @@ import { decrypt } from '../shared/crypto.js';
  * Single place that talks to Gemini for both AI features (invoice/receipt
  * scanner and amortization scan import). One place to swap models/keys later.
  *
- * Key resolution: a tenant's encrypted key in the settings table takes
- * priority, falling back to GEMINI_API_KEY from env.
+ * Two keys, tried in order: the FREE-tier key first, then the PAID key as a
+ * fallback — so you burn the free quota first and only spend on the paid tier
+ * when the free one fails (rate limit / quota / 5xx).
  */
-async function resolveKey(tenantId) {
-  const { rows } = await query(
-    `SELECT value FROM settings WHERE tenant_id = $1 AND key = 'gemini_api_key'`,
-    [tenantId],
-  );
+async function readSetting(tenantId, key) {
+  const { rows } = await query(`SELECT value FROM settings WHERE tenant_id = $1 AND key = $2`, [tenantId, key]);
   if (rows[0]?.value) {
     const dec = decrypt(rows[0].value);
     if (dec) return dec;
   }
-  return config.gemini.apiKey;
+  return null;
+}
+
+// Ordered list of API keys to try: [free/primary, paid/fallback]. Empty ones skipped.
+async function resolveKeys(tenantId) {
+  const free = (await readSetting(tenantId, 'gemini_api_key')) || config.gemini.apiKey;
+  const paid = await readSetting(tenantId, 'gemini_api_key_paid');
+  const keys = [];
+  if (free) keys.push({ key: free, tier: 'free' });
+  if (paid && paid !== free) keys.push({ key: paid, tier: 'paid' });
+  return keys;
+}
+
+// Back-compat single-key resolver (used by listModels/testConnection).
+async function resolveKey(tenantId) {
+  const keys = await resolveKeys(tenantId);
+  return keys[0]?.key || '';
 }
 
 async function resolveModel(tenantId) {
@@ -34,28 +48,14 @@ const CYRILLIC_NOTE =
   'Extract text exactly as printed, preserving the original script — do not transliterate. ' +
   'Detect currency from symbols or text such as €, EUR, ден, MKD, денари.';
 
-/**
- * Calls the Gemini generateContent REST endpoint with an image + JSON prompt.
- * Returns parsed JSON (responseMimeType application/json guarantees clean JSON).
- */
-async function callVision({ apiKey, model, prompt, file }) {
-  if (!apiKey) {
-    const err = new Error('No Gemini API key configured. Add one in Settings → AI Integration.');
-    err.status = 400;
-    throw err;
-  }
+async function requestOnce({ apiKey, model, prompt, file }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
     contents: [
       {
         parts: [
           { text: prompt },
-          {
-            inline_data: {
-              mime_type: file.mimetype || 'image/jpeg',
-              data: file.buffer.toString('base64'),
-            },
-          },
+          { inline_data: { mime_type: file.mimetype || 'image/jpeg', data: file.buffer.toString('base64') } },
         ],
       },
     ],
@@ -66,39 +66,61 @@ async function callVision({ apiKey, model, prompt, file }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!resp.ok) {
-    const text = await resp.text();
-    const err = new Error(`Gemini request failed: ${resp.status} ${text}`);
-    err.status = 502;
+  return resp;
+}
+
+/**
+ * Runs the request against the free key first; on failure (429 quota/rate-limit,
+ * 401/403 auth, or 5xx) falls through to the paid key. Only the last error is
+ * surfaced if every key fails.
+ */
+async function callVision({ tenantId, model, prompt, file }) {
+  const keys = await resolveKeys(tenantId);
+  if (!keys.length) {
+    const err = new Error('No Gemini API key configured. Add one in Settings → AI Integration.');
+    err.status = 400;
     throw err;
   }
-  const json = await resp.json();
-  const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
+  let lastErr = null;
+  for (const { key, tier } of keys) {
+    try {
+      const resp = await requestOnce({ apiKey: key, model, prompt, file });
+      if (resp.ok) {
+        const json = await resp.json();
+        const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        try { return JSON.parse(raw); } catch { return { _raw: raw }; }
+      }
+      const text = await resp.text();
+      lastErr = new Error(`Gemini (${tier} key) failed: ${resp.status} ${text.slice(0, 300)}`);
+      lastErr.status = 502;
+      console.warn(`[gemini] ${tier} key returned ${resp.status}${keys.length > 1 && tier === 'free' ? ' — trying paid key' : ''}`);
+      // fall through to the next key
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[gemini] ${tier} key error: ${e.message}`);
+    }
   }
+  throw lastErr;
 }
 
 export async function scanInvoiceDocument(tenantId, file) {
-  const [apiKey, model] = await Promise.all([resolveKey(tenantId), resolveModel(tenantId)]);
+  const model = await resolveModel(tenantId);
   const prompt =
     'You are an invoice/receipt data extractor. Return ONLY JSON with keys: ' +
     'invoice_number, description, amount (number), currency (MKD or EUR), date (YYYY-MM-DD), ' +
     'vendor_name, detected_plate (any North Macedonia license plate like "SK 1234 AB" or null). ' +
     CYRILLIC_NOTE;
-  return callVision({ apiKey, model, prompt, file });
+  return callVision({ tenantId, model, prompt, file });
 }
 
 export async function scanAmortizationDocument(tenantId, file) {
-  const [apiKey, model] = await Promise.all([resolveKey(tenantId), resolveModel(tenantId)]);
+  const model = await resolveModel(tenantId);
   const prompt =
     'You are a leasing-schedule data extractor. Return ONLY JSON with keys: ' +
     'total_amount (number), down_payment (number), monthly_amount (number), months_total (integer), ' +
     'interest_rate (number or null), start_date (YYYY-MM-DD), currency (MKD or EUR). ' +
     CYRILLIC_NOTE;
-  return callVision({ apiKey, model, prompt, file });
+  return callVision({ tenantId, model, prompt, file });
 }
 
 /**
