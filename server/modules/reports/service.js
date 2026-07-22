@@ -202,6 +202,96 @@ export async function upcomingPayments(tenantId, days = 30) {
   return [...payables, ...receivables].sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
 }
 
+// ── Due Payments by month, grouped by company ──────────────────────────────
+const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+function ymAdd(dateStr, n) { const d = new Date(dateStr); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
+
+// Expand one payable invoice into the schedule rows that fall inside [start,end].
+function expandMonth(inv, start, end) {
+  const kind = inv.source === 'amortization' ? 'lease' : (inv.installment_count > 1 ? 'installment' : 'invoice');
+  const rows = [];
+  if (inv.installment_count && inv.installment_count > 1) {
+    const count = inv.installment_count;
+    const total = r2(Number(inv.amount));
+    const per = Math.round(total / count);          // whole-denar, last absorbs remainder
+    const paidAmt = Number(inv.paid_amount);
+    let cumulative = 0;
+    for (let k = 0; k < count; k++) {
+      const amount = k === count - 1 ? r2(total - per * (count - 1)) : per;
+      cumulative = r2(cumulative + amount);
+      const mo = ymAdd(inv.due_date, k);
+      if (mo >= start && mo <= end) {
+        rows.push({ kind, label: `${inv.description} · ${k + 1}/${count}`, category: inv.category, month: mo, amount, payAmount: amount, paid: cumulative <= paidAmt + 0.001 });
+      }
+    }
+  } else {
+    const mo = String(inv.due_date).slice(0, 10);
+    if (mo >= start && mo <= end) {
+      const remaining = r2(Number(inv.amount) - Number(inv.paid_amount));
+      rows.push({ kind, label: inv.description, category: inv.category, month: mo, amount: r2(Number(inv.amount)), payAmount: remaining, paid: inv.status === 'paid' });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Everything payable in a given month (YYYY-MM), grouped by company/worker.
+ * Installment plans and leases are expanded to the month's installment; regular
+ * invoices land on their due date. Each group carries lease / installment /
+ * other subtotals plus a due total, and each row keeps its invoiceId + payAmount
+ * so it can be marked paid straight from the report.
+ */
+export async function duePayments(tenantId, month) {
+  const m = /^\d{4}-\d{2}$/.test(month || '') ? month : new Date().toISOString().slice(0, 7);
+  const monthStart = `${m}-01`;
+  const [yy, mm] = m.split('-').map(Number);
+  const monthEnd = new Date(yy, mm, 0).toISOString().slice(0, 10);
+
+  const { rows: invoices } = await query(
+    `SELECT i.id, i.company_id, i.worker_id, COALESCE(c.name, w.name) AS party_name,
+            (i.worker_id IS NOT NULL) AS is_worker,
+            i.description, i.amount, i.paid_amount, i.due_date, i.status, i.source,
+            i.category, i.installment_count
+     FROM invoices i
+     LEFT JOIN companies c ON c.id = i.company_id
+     LEFT JOIN workers w ON w.id = i.worker_id
+     WHERE i.tenant_id = $1`,
+    [tenantId],
+  );
+
+  const groups = new Map();
+  for (const inv of invoices) {
+    const rows = expandMonth(inv, monthStart, monthEnd);
+    if (!rows.length) continue;
+    const key = inv.company_id ? `c${inv.company_id}` : `w${inv.worker_id}`;
+    if (!groups.has(key)) {
+      groups.set(key, { id: inv.company_id || inv.worker_id, party_name: inv.party_name || '—', is_worker: inv.is_worker, items: [] });
+    }
+    for (const row of rows) groups.get(key).items.push({ invoiceId: inv.id, ...row });
+  }
+
+  const companies = [...groups.values()].map((g) => {
+    const sum = (pred) => r2(g.items.filter(pred).reduce((s, x) => s + x.payAmount, 0));
+    return {
+      id: g.id, party_name: g.party_name, is_worker: g.is_worker,
+      leaseTotal: sum((x) => x.kind === 'lease' && !x.paid),
+      installmentTotal: sum((x) => x.kind === 'installment' && !x.paid),
+      invoiceTotal: sum((x) => x.kind === 'invoice' && !x.paid),
+      dueTotal: sum((x) => !x.paid),
+      paidTotal: sum((x) => x.paid),
+      items: g.items.sort((a, b) => new Date(a.month) - new Date(b.month)),
+    };
+  }).sort((a, b) => b.dueTotal - a.dueTotal);
+
+  return {
+    month: m, monthStart, monthEnd, companies,
+    grandDue: r2(companies.reduce((s, c) => s + c.dueTotal, 0)),
+    grandPaid: r2(companies.reduce((s, c) => s + c.paidTotal, 0)),
+    grandLease: r2(companies.reduce((s, c) => s + c.leaseTotal, 0)),
+    grandInstallment: r2(companies.reduce((s, c) => s + c.installmentTotal, 0)),
+  };
+}
+
 // Company Statement — full vendor ledger for one company (printable).
 export async function companyStatement(tenantId, companyId) {
   const company = (await query(`SELECT * FROM companies WHERE tenant_id=$1 AND id=$2`, [tenantId, companyId])).rows[0];

@@ -43,6 +43,7 @@ router.get('/reports/vehicle-utilization', asyncHandler(async (req, res) => res.
 router.get('/reports/vehicle-cost', asyncHandler(async (req, res) => res.json(await service.vehicleCost(req.tenantId, req.query.from, req.query.to))));
 router.get('/reports/salary', asyncHandler(async (req, res) => res.json(await service.salaryReport(req.tenantId))));
 router.get('/reports/upcoming-payments', asyncHandler(async (req, res) => res.json(await service.upcomingPayments(req.tenantId, Number(req.query.days) || 30))));
+router.get('/reports/due-payments', asyncHandler(async (req, res) => res.json(await service.duePayments(req.tenantId, req.query.month))));
 router.get('/reports/company-statement/:companyId', asyncHandler(async (req, res) => res.json(await service.companyStatement(req.tenantId, Number(req.params.companyId)))));
 router.get('/reports/client-statement/:companyId', asyncHandler(async (req, res) => res.json(await service.clientStatement(req.tenantId, Number(req.params.companyId)))));
 

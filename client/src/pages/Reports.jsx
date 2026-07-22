@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd } from '../lib/format.js';
 import { Spinner, Badge, EurBadge } from '../components/ui.jsx';
+import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
 const REPORTS = [
+  ['due-payments', 'Due Payments', 'What you owe per company, by month — mark paid here'],
   ['cash-flow', 'Cash Flow', 'Daily cash + card income'],
   ['outstanding-vendors', 'Outstanding Vendors', 'Who you owe, by balance'],
   ['outstanding-clients', 'Receivables Report', 'Who owes you, by balance'],
@@ -20,7 +22,12 @@ export default function Reports() {
   const [exporting, setExporting] = useState(false);
   const [statement, setStatement] = useState(null);
 
-  useEffect(() => { setRows(null); api.get(`/reports/${active}`).then(setRows).catch(() => setRows([])); }, [active]);
+  const isDue = active === 'due-payments';
+  useEffect(() => {
+    if (isDue) return;                              // custom interactive report handles its own data
+    setRows(null);
+    api.get(`/reports/${active}`).then(setRows).catch(() => setRows([]));
+  }, [active]);
 
   async function exportXlsx() {
     setExporting(true);
@@ -33,7 +40,7 @@ export default function Reports() {
     <>
       <div className="page-head">
         <div className="page-title">Reports</div>
-        <button className="btn ghost" onClick={exportXlsx} disabled={exporting}>{exporting ? 'Exporting…' : '⬇ Export Excel'}</button>
+        {!isDue && <button className="btn ghost" onClick={exportXlsx} disabled={exporting}>{exporting ? 'Exporting…' : '⬇ Export Excel'}</button>}
       </div>
 
       <div className="chip-row" style={{ marginBottom: 16 }}>
@@ -44,11 +51,97 @@ export default function Reports() {
         ))}
       </div>
 
-      {!rows ? <Spinner /> : <ReportTable name={active} rows={rows} />}
+      {isDue ? <DuePaymentsReport /> : (!rows ? <Spinner /> : <ReportTable name={active} rows={rows} />)}
 
       <StatementSection onOpen={setStatement} />
       {statement && <StatementModal {...statement} onClose={() => setStatement(null)} />}
     </>
+  );
+}
+
+function kindBadge(kind) {
+  const tone = kind === 'lease' ? 'blue' : kind === 'installment' ? 'yellow' : 'gray';
+  return <Badge tone={tone}>{kind}</Badge>;
+}
+
+function DuePaymentsReport() {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [data, setData] = useState(null);
+  const [paying, setPaying] = useState(null);
+  const monthLabel = new Date(`${month}-01`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+  const load = () => { setData(null); api.get(`/reports/due-payments?month=${month}`).then(setData).catch(() => setData({ companies: [] })); };
+  useEffect(() => { load(); }, [month]);
+
+  return (
+    <>
+      <div className="card pad" style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>MONTH</div>
+          <input className="input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 190 }} />
+        </div>
+        {data && (
+          <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
+            <Stat label="Total due" value={mkd(data.grandDue)} tone="var(--neg)" />
+            <Stat label="Leases" value={mkd(data.grandLease)} />
+            <Stat label="Installments" value={mkd(data.grandInstallment)} />
+            <Stat label="Paid this month" value={mkd(data.grandPaid)} tone="var(--pos)" />
+          </div>
+        )}
+      </div>
+
+      {!data ? <Spinner /> : data.companies.length === 0 ? (
+        <div className="empty">Nothing due in {monthLabel}.</div>
+      ) : (
+        data.companies.map((c) => (
+          <div key={`${c.is_worker ? 'w' : 'c'}${c.id}`} className="card pad" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{c.party_name} {c.is_worker && <Badge tone="gray">worker</Badge>}</div>
+              <div className="muted" style={{ fontSize: 13 }}>
+                {c.leaseTotal > 0 && <>Lease <b>{mkd(c.leaseTotal)}</b> · </>}
+                {c.installmentTotal > 0 && <>Installments <b>{mkd(c.installmentTotal)}</b> · </>}
+                {c.invoiceTotal > 0 && <>Other <b>{mkd(c.invoiceTotal)}</b> · </>}
+                Due <b style={{ color: 'var(--neg)' }}>{mkd(c.dueTotal)}</b>
+              </div>
+            </div>
+            <table className="tbl">
+              <thead><tr><th>Type</th><th>Payment</th><th>Category</th><th className="num">Amount</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {c.items.map((it, i) => (
+                  <tr key={i} style={{ opacity: it.paid ? 0.55 : 1 }}>
+                    <td>{kindBadge(it.kind)}</td>
+                    <td>{it.label}</td>
+                    <td className="muted">{it.category || '—'}</td>
+                    <td className="num">{mkd(it.amount)}</td>
+                    <td>{it.paid ? <Badge tone="green">paid</Badge> : <Badge tone="red">due</Badge>}</td>
+                    <td className="num">{!it.paid && <button className="btn ghost sm" onClick={() => setPaying({ invoiceId: it.invoiceId, label: it.label, amount: it.payAmount })}>Mark paid</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))
+      )}
+
+      {paying && (
+        <MarkPaidModal
+          invoiceId={paying.invoiceId}
+          label={paying.label}
+          defaultAmount={paying.amount}
+          onClose={() => setPaying(null)}
+          onDone={() => { setPaying(null); load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+function Stat({ label, value, tone }) {
+  return (
+    <div>
+      <div className="muted" style={{ fontSize: 11, fontWeight: 600 }}>{label.toUpperCase()}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: tone || 'inherit' }}>{value}</div>
+    </div>
   );
 }
 
