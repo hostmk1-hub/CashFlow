@@ -24,7 +24,8 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'], // full Cyrillic coverage
+        sans: ['IBM Plex Sans', 'system-ui', 'sans-serif'], // financial, full Cyrillic coverage
+        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
       },
     },
   },
