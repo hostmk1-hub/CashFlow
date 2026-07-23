@@ -185,6 +185,54 @@ export async function remove(tenantId, planId) {
 }
 
 /**
+ * Build a lease plan from an uploaded monthly payment schedule. Each row's exact
+ * amount becomes one tracked installment invoice (no total/monthly formula) —
+ * the plan just carries the schedule for this vehicle + leasing company. Rows
+ * without a date fall back to consecutive months from start_date (or today).
+ */
+export async function createFromSchedule(tenantId, input) {
+  const { vehicle_id, company_id, currency } = input;
+  const rows = input.schedule || [];
+  if (!rows.length) throw new ApiError(400, 'The payment schedule is empty');
+  const xr = input.exchange_rate ?? 1;
+  const baseStart = cleanDate(input.start_date) || cleanDate(rows[0].due_date) || new Date().toISOString().slice(0, 10);
+  // Resolve a due date for every row (fallback: consecutive months from base).
+  const resolved = rows.map((r, i) => ({
+    due_date: cleanDate(r.due_date) || addMonths(baseStart, i),
+    money: toMkd({ amount: r.amount, currency, exchangeRate: xr }),
+  }));
+  const totalMkd = round2(resolved.reduce((s, r) => s + r.money.amount, 0));
+  const purchase = input.purchase_price != null ? toMkd({ amount: input.purchase_price, currency, exchangeRate: xr }) : null;
+
+  return withTransaction(async (client) => {
+    const { rows: planRows } = await client.query(
+      `INSERT INTO amortization_plans
+        (tenant_id, vehicle_id, company_id, total_amount, down_payment, monthly_amount,
+         months_total, interest_rate, start_date, scan_url, currency, exchange_rate, purchase_price, lease_number)
+       VALUES ($1,$2,$3,$4,0,NULL,$5,NULL,$6,NULL,$7,$8,$9,$10) RETURNING *`,
+      [tenantId, vehicle_id, company_id, totalMkd, resolved.length, resolved[0].due_date,
+       currency, xr, purchase ? purchase.amount : null, input.lease_number || null],
+    );
+    const plan = planRows[0];
+    for (let i = 0; i < resolved.length; i++) {
+      const r = resolved[i];
+      await invoiceRepo.create(
+        tenantId,
+        {
+          company_id, vehicle_id, amort_plan_id: plan.id,
+          description: `Lease installment ${i + 1}/${resolved.length}`,
+          amount: r.money.amount, due_date: r.due_date,
+          source: 'amortization', category: 'leasing',
+          currency: r.money.currency, original_amount: r.money.originalAmount, exchange_rate: r.money.exchangeRate,
+        },
+        client,
+      );
+    }
+    return { plan, invoicesGenerated: resolved.length, total: totalMkd };
+  });
+}
+
+/**
  * Confirm a scanned draft → same as create. Draft comes from the Gemini scan.
  */
 export function confirm(tenantId, input) {

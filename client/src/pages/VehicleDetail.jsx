@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
 import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge } from '../components/ui.jsx';
+import PaymentScheduleModal from '../components/PaymentScheduleModal.jsx';
 
 function utilTone(u) { return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
 function addMonthsStr(dateStr, n) { const d = new Date(dateStr); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
@@ -16,6 +17,7 @@ export default function VehicleDetail() {
   const [amortOpen, setAmortOpen] = useState(false);
   const [amortEdit, setAmortEdit] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [companies, setCompanies] = useState([]);
 
   const load = () => api.get(`/vehicles/${id}`).then(setD).catch(() => {});
@@ -48,6 +50,7 @@ export default function VehicleDetail() {
         </div>
         <div className="toolbar">
           <button className="btn ghost" onClick={() => setScanOpen(true)}>📷 Scan Invoice / Expense</button>
+          <button className="btn ghost" onClick={() => setScheduleOpen(true)}>📅 Upload Payment Schedule</button>
           <button className="btn ghost" onClick={() => setAmortOpen(true)}>+ Amortization Plan</button>
           <button className="btn" onClick={() => setIncomeOpen(true)}>+ Monthly Income</button>
         </div>
@@ -97,8 +100,11 @@ export default function VehicleDetail() {
             </>
           ) : (
             <div style={{ textAlign: 'center', padding: '8px 0' }}>
-              <div className="muted" style={{ marginBottom: 10 }}>No lease plan yet. Upload the lease schedule (photo/PDF) and we’ll set up the monthly installments for this car.</div>
-              <button className="btn" onClick={() => setAmortOpen(true)}>+ Add lease plan (upload or manual)</button>
+              <div className="muted" style={{ marginBottom: 10 }}>No lease plan yet. Upload the leasing company's monthly payment schedule and we’ll create the tracked payments for this car.</div>
+              <div className="toolbar" style={{ justifyContent: 'center' }}>
+                <button className="btn" onClick={() => setScheduleOpen(true)}>📅 Upload Payment Schedule</button>
+                <button className="btn ghost" onClick={() => setAmortOpen(true)}>+ Manual / scan plan</button>
+              </div>
             </div>
           )}
         </div>
@@ -149,6 +155,7 @@ export default function VehicleDetail() {
       {amortOpen && <AmortizationModal vehicleId={id} companies={companies} onClose={() => setAmortOpen(false)} onSaved={() => { setAmortOpen(false); load(); }} />}
       {amortEdit && <AmortizationModal plan={amortEdit} vehicleId={id} companies={companies} onClose={() => setAmortEdit(null)} onSaved={() => { setAmortEdit(null); load(); }} />}
       {scanOpen && <VehicleScanModal vehicleId={id} plate={d.vehicle.plate} companies={companies} onClose={() => setScanOpen(false)} onSaved={() => { setScanOpen(false); load(); }} />}
+      {scheduleOpen && <PaymentScheduleModal vehicleId={id} plate={d.vehicle.plate} defaultCompanyId={plan?.company_id} defaultLeaseNumber={plan?.lease_number} onClose={() => setScheduleOpen(false)} onSaved={() => { setScheduleOpen(false); load(); }} />}
     </>
   );
 }

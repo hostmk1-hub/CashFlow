@@ -11,6 +11,7 @@ import { Select } from '../components/ui/select.jsx';
 import { Label } from '../components/ui/label.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table.jsx';
 import { Dialog, DialogHeader, DialogBody, DialogFooter } from '../components/ui/dialog.jsx';
+import PaymentScheduleModal from '../components/PaymentScheduleModal.jsx';
 
 function utilVariant(u) { if (u == null) return 'gray'; return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
 
@@ -49,6 +50,7 @@ export default function Vehicles() {
   const nav = useNavigate();
   const [rows, setRows] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [scheduleFor, setScheduleFor] = useState(null); // vehicle whose payment schedule we're uploading
   const [sort, setSort] = useState('plate');
   async function del(v, e) {
     e.stopPropagation();
@@ -129,12 +131,13 @@ export default function Vehicles() {
           </Table>
         </Card>
       )}
-      {editing && <VehicleModal vehicle={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {editing && <VehicleModal vehicle={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} onSchedule={(v) => { setEditing(null); setScheduleFor(v); }} />}
+      {scheduleFor && <PaymentScheduleModal vehicleId={scheduleFor.id} plate={scheduleFor.plate} defaultLeaseNumber={scheduleFor.lease_number} onClose={() => setScheduleFor(null)} onSaved={() => { setScheduleFor(null); load(); }} />}
     </>
   );
 }
 
-function VehicleModal({ vehicle, onClose, onSaved }) {
+function VehicleModal({ vehicle, onClose, onSaved, onSchedule }) {
   const isNew = !vehicle.id;
   const [f, setF] = useState({ plate: '', make: '', model: '', year: new Date().getFullYear(), rentalsyst_id: '', ...vehicle });
   const [companies, setCompanies] = useState([]);
@@ -216,8 +219,9 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
           <div><Label>RENTALsyst ID</Label><Input value={f.rentalsyst_id || ''} onChange={set('rentalsyst_id')} /></div>
         </div>
 
-        <div className="pt-1 mt-1 border-t border-border">
+        <div className="pt-1 mt-1 border-t border-border flex items-center justify-between">
           <div className="text-sm font-semibold mt-3 mb-1">Lease details {planId ? '' : <span className="text-muted-foreground font-normal">(optional — fill to attach a lease)</span>}</div>
+          {!isNew && onSchedule && <button type="button" className="btn ghost sm" onClick={() => onSchedule(vehicle)}>📅 Upload payment schedule</button>}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><Label>Leasing company</Label>

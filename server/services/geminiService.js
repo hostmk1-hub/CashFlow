@@ -170,6 +170,29 @@ export async function scanInvoiceListDocument(tenantId, file) {
     }));
 }
 
+/**
+ * Extract a lease/loan payment SCHEDULE (amortization table) from a photo/PDF —
+ * one row per monthly payment. Returns [{ due_date, amount }] in order. Used to
+ * build a car's payment plan directly from the leasing company's schedule, with
+ * each month's exact amount (no total/monthly formula).
+ */
+export async function scanPaymentSchedule(tenantId, file) {
+  const model = await resolveModel(tenantId);
+  const prompt =
+    'You are extracting a lease/loan amortization PAYMENT SCHEDULE — a table with one ' +
+    'row per monthly payment. Return ONLY JSON {"schedule":[{"due_date":"YYYY-MM-DD","amount":<number>}]} ' +
+    'with one entry per monthly installment, in chronological order. Use the PAYMENT/INSTALLMENT ' +
+    'amount due that month (NOT the remaining balance or principal-only). If a row shows only a ' +
+    'month/period without a full date, use the first day of that month (YYYY-MM-01). amount is a ' +
+    'plain number (no currency symbol, dot decimals). Include EVERY payment row; do not include ' +
+    'summary/total lines. ' + CYRILLIC_NOTE;
+  const out = await callVision({ tenantId, model, prompt, file });
+  const list = Array.isArray(out) ? out : (out.schedule || out.rows || out.payments || []);
+  return list
+    .map((r) => ({ due_date: r.due_date || r.date || r.month || null, amount: r.amount == null || r.amount === '' ? null : Number(r.amount) }))
+    .filter((r) => Number.isFinite(r.amount) && r.amount > 0);
+}
+
 export async function scanAmortizationDocument(tenantId, file) {
   const model = await resolveModel(tenantId);
   const prompt =

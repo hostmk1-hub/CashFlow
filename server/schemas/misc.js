@@ -47,6 +47,22 @@ export const amortizationSchema = z.object({
   down_payment_paid: z.boolean().default(true),
 });
 
+// Build a lease plan straight from an uploaded monthly payment schedule — each
+// month's exact amount becomes one tracked payment (no total/monthly formula).
+export const scheduleAmortizationSchema = z.object({
+  vehicle_id: z.coerce.number().int().positive(),
+  company_id: z.coerce.number().int().positive(),
+  lease_number: z.string().max(100).nullish(),
+  purchase_price: z.coerce.number().min(0).nullish(),
+  currency: currencyEnum,
+  exchange_rate: z.coerce.number().positive().optional(),
+  start_date: z.string().min(1).nullish(), // fallback for rows with no date
+  schedule: z.array(z.object({
+    due_date: z.string().nullish(),
+    amount: z.coerce.number().positive(),
+  })).min(1).max(120),
+});
+
 // Editing an existing lease plan: the vehicle it belongs to doesn't change, and
 // the down payment / invoice generation aren't re-run.
 export const updateAmortizationSchema = z.object({
