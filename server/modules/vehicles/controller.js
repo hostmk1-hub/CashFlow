@@ -20,6 +20,9 @@ export const remove = asyncHandler(async (req, res) => {
 export const amortization = asyncHandler(async (req, res) => {
   res.json(await service.amortization(req.tenantId, Number(req.params.id)));
 });
+export const installments = asyncHandler(async (req, res) => {
+  res.json(await service.installments(req.tenantId, Number(req.params.id)));
+});
 export const pnl = asyncHandler(async (req, res) => {
   res.json(await service.pnl(req.tenantId, Number(req.params.id)));
 });

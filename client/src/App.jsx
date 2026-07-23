@@ -18,6 +18,7 @@ import DailyIncome from './pages/DailyIncome.jsx';
 import Calendar from './pages/Calendar.jsx';
 import Reports from './pages/Reports.jsx';
 import Settings from './pages/Settings.jsx';
+import AuditLog from './pages/AuditLog.jsx';
 
 export default function App() {
   const { user, activeTenant, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/daily-income" element={<DailyIncome />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/audit" element={<AuditLog />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

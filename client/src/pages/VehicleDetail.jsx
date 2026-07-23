@@ -3,28 +3,43 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge, AiBadge, Dropzone } from '../components/ui.jsx';
 import PaymentScheduleModal from '../components/PaymentScheduleModal.jsx';
+import MarkPaidModal from '../components/MarkPaidModal.jsx';
+import EditPaymentModal from '../components/EditPaymentModal.jsx';
 
+const ROLE_RANK = { staff: 1, manager: 2, admin: 3, owner: 4 };
 function utilTone(u) { return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
 function addMonthsStr(dateStr, n) { const d = new Date(dateStr); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
 
 export default function VehicleDetail() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { activeTenant } = useAuth();
+  const isAdmin = (ROLE_RANK[activeTenant?.role] || 0) >= 3;
   const [d, setD] = useState(null);
+  const [inst, setInst] = useState(null);
   const [incomeOpen, setIncomeOpen] = useState(false);
   const [amortOpen, setAmortOpen] = useState(false);
   const [amortEdit, setAmortEdit] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [companies, setCompanies] = useState([]);
+  const [marking, setMarking] = useState(null);       // installment row to mark paid
+  const [editingPayment, setEditingPayment] = useState(null); // payment id to edit/undo
 
-  const load = () => api.get(`/vehicles/${id}`).then(setD).catch(() => {});
+  const loadInst = () => api.get(`/vehicles/${id}/installments`).then(setInst).catch(() => setInst(null));
+  const load = () => { api.get(`/vehicles/${id}`).then(setD).catch(() => {}); loadInst(); };
   useEffect(() => { load(); api.get('/companies').then(setCompanies).catch(() => {}); }, [id]);
   async function deleteLease(planId) {
     if (!confirm('Delete this lease plan and its unpaid installment invoices? Paid installments must be removed first.')) return;
     try { await api.del(`/amortization/${planId}`); load(); }
+    catch (e) { alert(e.message); }
+  }
+  async function undoPayment(paymentId) {
+    if (!window.confirm('Undo this payment? The installment will return to unpaid and the balance will be restored. This action is logged.')) return;
+    try { await api.del(`/payments/${paymentId}`); load(); }
     catch (e) { alert(e.message); }
   }
   if (!d) return <Spinner />;
@@ -122,6 +137,40 @@ export default function VehicleDetail() {
         </div>
       </div>
 
+      {inst && inst.rows.length > 0 && (
+        <div className="card table-wrap" style={{ marginBottom: 16 }}>
+          <div className="pad" style={{ paddingBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+            <h3 className="card-title" style={{ margin: 0 }}>Installments</h3>
+            <div className="toolbar" style={{ fontSize: 13 }}>
+              <span className="muted">Due now <b style={{ color: 'var(--neg,#dc2626)' }}>{mkd(inst.totalDueNow)}</b></span>
+              <span className="muted">Upcoming <b>{mkd(inst.totalUpcoming)}</b></span>
+              <span className="muted">Paid <b style={{ color: 'var(--green,#16a34a)' }}>{mkd(inst.totalPaid)}</b></span>
+            </div>
+          </div>
+          <table className="tbl">
+            <thead><tr><th>Installment</th><th>Month</th><th className="num">Amount</th><th>Status</th><th className="num"></th></tr></thead>
+            <tbody>{inst.rows.map((r) => (
+              <tr key={r.invoiceId}>
+                <td>{r.label}</td>
+                <td className="muted">{r.month ? date(r.month) : '—'}</td>
+                <td className="num">{mkd(r.amount)}{r.status === 'paid' && Number(r.paid_amount) !== Number(r.amount) ? <span className="muted"> (paid {mkd(r.paid_amount)})</span> : ''}</td>
+                <td><Badge tone={r.status === 'paid' ? 'green' : r.status === 'due' ? 'red' : 'gray'}>{r.status === 'paid' ? 'Paid' : r.status === 'due' ? 'Due' : 'Upcoming'}</Badge></td>
+                <td className="num">
+                  {r.status !== 'paid'
+                    ? <button className="btn ghost sm" onClick={() => setMarking(r)}>Mark paid</button>
+                    : isAdmin && r.last_payment_id
+                      ? <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+                          <button className="btn ghost sm" onClick={() => setEditingPayment(r.last_payment_id)}>Edit</button>
+                          <button className="btn ghost sm" style={{ color: 'var(--neg,#dc2626)' }} onClick={() => undoPayment(r.last_payment_id)}>Undo</button>
+                        </div>
+                      : <span className="muted">—</span>}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
       {chartData.length > 0 && (
         <div className="card pad" style={{ marginBottom: 16 }}>
           <h3 className="card-title">Monthly trend</h3>
@@ -156,6 +205,8 @@ export default function VehicleDetail() {
       {amortEdit && <AmortizationModal plan={amortEdit} vehicleId={id} companies={companies} onClose={() => setAmortEdit(null)} onSaved={() => { setAmortEdit(null); load(); }} />}
       {scanOpen && <VehicleScanModal vehicleId={id} plate={d.vehicle.plate} companies={companies} onClose={() => setScanOpen(false)} onSaved={() => { setScanOpen(false); load(); }} />}
       {scheduleOpen && <PaymentScheduleModal vehicleId={id} plate={d.vehicle.plate} defaultCompanyId={plan?.company_id} defaultLeaseNumber={plan?.lease_number} onClose={() => setScheduleOpen(false)} onSaved={() => { setScheduleOpen(false); load(); }} />}
+      {marking && <MarkPaidModal invoiceId={marking.invoiceId} defaultAmount={marking.remaining} remaining={marking.remaining} label={marking.label} onClose={() => setMarking(null)} onDone={() => { setMarking(null); load(); }} />}
+      {editingPayment && <EditPaymentModal paymentId={editingPayment} onClose={() => setEditingPayment(null)} onDone={() => { setEditingPayment(null); load(); }} />}
     </>
   );
 }

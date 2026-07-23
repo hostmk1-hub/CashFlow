@@ -96,6 +96,13 @@ export async function list(tenantId, filters) {
   return rows;
 }
 
+export async function getById(tenantId, id) {
+  const payment = await repo.getPayment(tenantId, id);
+  if (!payment) throw new ApiError(404, 'Payment not found');
+  payment.allocations = await repo.allocationsForPayment(tenantId, id);
+  return payment;
+}
+
 /**
  * Edit a payment: method, date and note are simple field updates. Changing the
  * amount is reconciled properly — the old allocations are reversed (restoring

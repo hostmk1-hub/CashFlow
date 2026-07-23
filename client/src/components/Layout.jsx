@@ -6,6 +6,8 @@ import { getTheme, toggleTheme } from '../lib/theme.js';
 import { Badge } from './ui.jsx';
 import * as Ic from './icons.jsx';
 
+const ROLE_RANK = { staff: 1, manager: 2, admin: 3, owner: 4 };
+
 const NAV = [
   ['Overview', [
     ['/', 'Dashboard', Ic.Grid],
@@ -80,6 +82,11 @@ export default function Layout({ children }) {
             </div>
           ))}
           <div className="nav-group-label">System</div>
+          {(ROLE_RANK[activeTenant?.role] || 0) >= 2 && (
+            <div className={`nav-item ${loc.pathname.startsWith('/audit') ? 'active' : ''}`} onClick={() => nav('/audit')}>
+              <Ic.Receipt /> Audit Log
+            </div>
+          )}
           <div className={`nav-item ${loc.pathname.startsWith('/settings') ? 'active' : ''}`} onClick={() => nav('/settings')}>
             <Ic.Settings /> Settings
           </div>

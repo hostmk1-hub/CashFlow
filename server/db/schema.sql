@@ -307,6 +307,21 @@ ALTER TABLE amortization_plans ALTER COLUMN start_date     DROP NOT NULL;
 ALTER TABLE payments        ADD COLUMN IF NOT EXISTS proof_url TEXT;
 ALTER TABLE client_payments ADD COLUMN IF NOT EXISTS proof_url TEXT;
 
+-- Audit trail: who did what to money records (mark paid / edit / delete …).
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id          BIGSERIAL PRIMARY KEY,
+  tenant_id   INT NOT NULL REFERENCES tenants(id),
+  user_id     INT,
+  action      VARCHAR(50) NOT NULL,       -- e.g. payment.create, payment.delete, invoice.pay
+  entity_type VARCHAR(40),
+  entity_id   INT,
+  summary     TEXT,
+  details     JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_logs (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs (tenant_id, entity_type, entity_id);
+
 -- ===== Derived views =====
 
 CREATE OR REPLACE VIEW company_balances AS

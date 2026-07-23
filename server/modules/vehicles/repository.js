@@ -28,6 +28,22 @@ export function list(tenantId, { q, activeOnly } = {}) {
   return query(sql, params).then((r) => r.rows);
 }
 
+// The vehicle's lease installment invoices (generated from its plan), with the
+// most recent payment id on each (for admin undo/edit).
+export function amortInvoices(tenantId, vehicleId) {
+  return query(
+    `SELECT i.id, i.description, i.amount, i.paid_amount, i.remaining, i.due_date, i.status,
+            (SELECT pa.payment_id FROM payment_allocations pa
+             JOIN payments p ON p.id = pa.payment_id
+             WHERE pa.invoice_id = i.id AND p.tenant_id = $1
+             ORDER BY p.id DESC LIMIT 1) AS last_payment_id
+     FROM invoices i
+     WHERE i.tenant_id = $1 AND i.vehicle_id = $2 AND i.amort_plan_id IS NOT NULL
+     ORDER BY i.due_date`,
+    [tenantId, vehicleId],
+  ).then((r) => r.rows);
+}
+
 export function getById(tenantId, id) {
   return query(`SELECT * FROM vehicles WHERE tenant_id = $1 AND id = $2`, [tenantId, id]).then(
     (r) => r.rows[0],

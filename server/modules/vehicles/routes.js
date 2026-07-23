@@ -7,6 +7,7 @@ const router = Router();
 router.get('/', ctrl.list);
 router.get('/:id', ctrl.getById);
 router.get('/:id/amortization', ctrl.amortization);
+router.get('/:id/installments', ctrl.installments);
 router.get('/:id/pnl', ctrl.pnl);
 router.post('/:id/income', requireMinRole('staff'), ctrl.setIncome);
 router.post('/', requireMinRole('staff'), ctrl.create);

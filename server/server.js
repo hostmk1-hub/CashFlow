@@ -28,6 +28,7 @@ import amortizationRoutes from './modules/amortization/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import reportsRoutes from './modules/reports/routes.js';
 import notificationRoutes from './modules/notifications/routes.js';
+import auditRoutes from './modules/audit/routes.js';
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,6 +105,7 @@ scoped.use('/daily-income', dailyIncomeRoutes);
 scoped.use('/amortization', amortizationRoutes);
 scoped.use('/settings', settingsRoutes);
 scoped.use('/notifications', notificationRoutes);
+scoped.use('/audit', auditRoutes);
 scoped.use('/', reportsRoutes); // dashboard, reminders, calendar, search, reports/*
 app.use('/api', scoped);
 
