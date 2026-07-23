@@ -18,6 +18,7 @@ export default function Settings() {
   const [letterhead, setLetterhead] = useState({ company_name: '', company_address: '', company_phone: '' });
   const [rentalsystKey, setRentalsystKey] = useState('');
   const [models, setModels] = useState(null); // { ok, models: [] }
+  const [revealed, setRevealed] = useState({}); // { gemini_api_key: '...' } when shown
   const canManage = ['owner', 'admin'].includes(activeTenant?.role);
   const EXPENSE_CATEGORIES = ['Leasing', 'Insurance', 'Repairs', 'Service', 'Tires', 'Other'];
   // Fast, valid free models first (auto model-fallback skips any that 404),
@@ -44,6 +45,14 @@ export default function Settings() {
     setMsg('Running backup…');
     try { const r = await api.post('/settings/backup/run'); setMsg(r.ok ? `Backup written: ${r.file}` : `Backup failed: ${r.error}`); load(); }
     catch (e) { setMsg(e.message); }
+  }
+
+  async function revealKey(key) {
+    if (revealed[key] !== undefined) { setRevealed((r) => { const n = { ...r }; delete n[key]; return n; }); return; }
+    try {
+      const r = await api.get(`/settings/reveal/${key}`);
+      setRevealed((prev) => ({ ...prev, [key]: r.decryptable ? (r.value || '(empty)') : '(cannot decrypt — key was saved under a different ENCRYPTION_KEY)' }));
+    } catch (e) { setMsg(e.message); }
   }
 
   async function saveSetting(key, value) {
@@ -86,8 +95,10 @@ export default function Settings() {
           <h3 className="card-title">AI Integration (Gemini)</h3>
           <Field label="Free-tier API key (tried first)">
             <input className="input" type="password" placeholder={geminiKey ? '' : 'paste a new key to replace'} value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
-            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Saved key: <b className="tabnum">{settings.gemini_api_key || 'not set'}</b>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4, wordBreak: 'break-all' }}>
+              Saved key: <b className="tabnum">{revealed.gemini_api_key !== undefined ? revealed.gemini_api_key : (settings.gemini_api_key || 'not set')}</b>
+              {canManage && settings.gemini_api_key && settings.gemini_api_key !== 'not set' &&
+                <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => revealKey('gemini_api_key')}>{revealed.gemini_api_key !== undefined ? '🙈 Hide' : '👁 Show'}</button>}
             </div>
           </Field>
           <div className="toolbar" style={{ marginBottom: 10 }}>
@@ -96,8 +107,10 @@ export default function Settings() {
           </div>
           <Field label="Paid API key (fallback — used only if the free key fails)">
             <input className="input" type="password" placeholder={geminiKeyPaid ? '' : 'paste a new key to replace'} value={geminiKeyPaid} onChange={(e) => setGeminiKeyPaid(e.target.value)} />
-            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Saved key: <b className="tabnum">{settings.gemini_api_key_paid || 'not set'}</b>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4, wordBreak: 'break-all' }}>
+              Saved key: <b className="tabnum">{revealed.gemini_api_key_paid !== undefined ? revealed.gemini_api_key_paid : (settings.gemini_api_key_paid || 'not set')}</b>
+              {canManage && settings.gemini_api_key_paid && settings.gemini_api_key_paid !== 'not set' &&
+                <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => revealKey('gemini_api_key_paid')}>{revealed.gemini_api_key_paid !== undefined ? '🙈 Hide' : '👁 Show'}</button>}
             </div>
           </Field>
           <div className="toolbar">

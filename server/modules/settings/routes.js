@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { settingSchema } from './validation.js';
-import { asyncHandler } from '../../shared/http.js';
+import { asyncHandler, ApiError } from '../../shared/http.js';
 import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';
 import { encrypt, decrypt } from '../../shared/crypto.js';
@@ -34,6 +34,21 @@ router.get(
       out[r.key] = SECRET_KEYS.has(r.key) ? keyHint(r.value) : r.value; // hint for secrets
     }
     res.json(out);
+  }),
+);
+
+// Reveal the full decrypted value of a secret setting — admin only. Used by the
+// "show key" toggle so the owner can copy/verify their own API key.
+router.get(
+  '/reveal/:key',
+  requireMinRole('admin'),
+  asyncHandler(async (req, res) => {
+    const k = req.params.key;
+    if (!SECRET_KEYS.has(k)) throw new ApiError(400, 'Not a revealable secret');
+    const { rows } = await query(`SELECT value FROM settings WHERE tenant_id = $1 AND key = $2`, [req.tenantId, k]);
+    if (!rows[0]) return res.json({ key: k, value: '' });
+    const value = decrypt(rows[0].value);
+    res.json({ key: k, value: value || '', decryptable: value != null });
   }),
 );
 
