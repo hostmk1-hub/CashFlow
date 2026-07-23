@@ -78,7 +78,7 @@ function fuzzyCompanyMatch(name, companies) {
 
 export async function scanInvoice(tenantId, file) {
   if (!file) throw new ApiError(400, 'No file uploaded');
-  const extracted = await scanInvoiceDocument(tenantId, file);
+  const { data: extracted, tier: aiTier, model: aiModel } = await scanInvoiceDocument(tenantId, file);
 
   // Persist the original scan (local + R2) so it can be downloaded later.
   let saved = { scan_url: null };
@@ -124,6 +124,8 @@ export async function scanInvoice(tenantId, file) {
     matched_vehicle_by: matchedBy,   // 'plate' | 'lease_number' | null
     matched_company_id: matchedCompany?.id ?? null,
     scan_url: saved.scan_url,
+    ai_tier: aiTier,
+    ai_model: aiModel,
     _raw: extracted._raw,
   };
 }
@@ -164,7 +166,7 @@ export async function confirmInvoice(tenantId, draft, fileUrl) {
 
 export async function scanAmortization(tenantId, file) {
   if (!file) throw new ApiError(400, 'No file uploaded');
-  const extracted = await scanAmortizationDocument(tenantId, file);
+  const { data: extracted, tier: aiTier, model: aiModel } = await scanAmortizationDocument(tenantId, file);
   const rate = await getEurRate(tenantId);
   // Match the leasing company from the document so the plan is set up from the
   // upload alone (Cyrillic↔Latin aware).
@@ -182,6 +184,8 @@ export async function scanAmortization(tenantId, file) {
     lease_number: extracted.lease_number ?? null,
     vendor_name: extracted.vendor_name ?? null,
     matched_company_id: matchedCompany?.id ?? null,
+    ai_tier: aiTier,
+    ai_model: aiModel,
     _raw: extracted._raw,
   };
 }

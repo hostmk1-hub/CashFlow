@@ -45,6 +45,21 @@ export function EurBadge({ currency, original }) {
   return <Badge tone="eur" title={original ? `€${original} original` : 'Originally in EUR'}>EUR</Badge>;
 }
 
+/**
+ * Shows which Gemini tier actually ran a scan: green glowing dot + "Gemini Lite"
+ * for the free key, red glowing dot + "Gemini Pro" for the paid-key fallback.
+ */
+export function AiBadge({ tier, model }) {
+  if (!tier) return null;
+  const free = tier === 'free';
+  return (
+    <span className={`ai-badge ${free ? 'ai-free' : 'ai-paid'}`} title={model ? `Model: ${model}` : ''}>
+      <span className="ai-dot" />
+      {free ? 'Gemini Lite' : 'Gemini Pro'}
+    </span>
+  );
+}
+
 export function CurrencyToggle({ value, onChange }) {
   return (
     <div className="seg">

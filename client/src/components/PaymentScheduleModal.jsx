@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd } from '../lib/format.js';
-import { Modal, Field, Spinner, CurrencyToggle } from './ui.jsx';
+import { Modal, Field, Spinner, CurrencyToggle, AiBadge } from './ui.jsx';
 
 /**
  * Upload a leasing company's monthly payment schedule (CSV/Excel/photo/PDF) for
@@ -18,6 +18,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
   const [startDate, setStartDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [ai, setAi] = useState(null); // { tier, model } when read by Gemini
 
   useEffect(() => { api.get('/companies').then(setCompanies).catch(() => {}); }, []);
 
@@ -29,6 +30,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
       const fd = new FormData(); fd.append('file', file);
       const res = await api.upload('/amortization/scan-schedule', fd);
       setRows(res.schedule.map((r) => ({ due_date: r.due_date || '', amount: r.amount })));
+      setAi(res.ai_tier ? { tier: res.ai_tier, model: res.ai_model } : null);
     } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   }
 
@@ -82,6 +84,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
           </div>
           <Field label="Start date (used only for rows with no date)"><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
 
+          {ai && <div style={{ margin: '4px 0 8px' }}><AiBadge tier={ai.tier} model={ai.model} /></div>}
           <div className="muted" style={{ fontSize: 12, margin: '8px 0 4px' }}>{rows.length} payments · total <b>{mkd(total)}</b> — review and edit, then create.</div>
           <div style={{ maxHeight: 320, overflow: 'auto' }}>
             <table className="tbl">

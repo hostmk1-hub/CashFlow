@@ -136,7 +136,8 @@ async function callWithFallback({ tenantId, buildReq }) {
         if (resp.ok) {
           const json = await resp.json();
           const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-          try { return JSON.parse(raw); } catch { return { _raw: raw }; }
+          let data; try { data = JSON.parse(raw); } catch { data = { _raw: raw }; }
+          return { data, tier, model }; // report which key tier + model actually ran
         }
         const text = await resp.text();
         lastErr = new Error(`Gemini (${tier} key, ${model}) failed: ${resp.status} ${text.slice(0, 200)}`);
@@ -193,15 +194,16 @@ export async function scanInvoiceListDocument(tenantId, file) {
     '(платено/плат./yes/да), "unpaid" if marked open/due, otherwise null. ' +
     'Do not invent rows and do not include summary/total lines as invoices. ' +
     CYRILLIC_NOTE;
-  const out = await callVision({ tenantId, prompt, file });
+  const { data: out, tier, model } = await callVision({ tenantId, prompt, file });
   const list = Array.isArray(out) ? out : (out.invoices || out.rows || []);
-  return list
+  const rows = list
     .filter((r) => r && (r.invoice_number != null) && String(r.invoice_number).trim() !== '')
     .map((r) => ({
       invoice_number: String(r.invoice_number).trim(),
       amount: r.amount == null || r.amount === '' ? null : Number(r.amount),
       status: r.status != null ? String(r.status).trim() : null,
     }));
+  return { rows, tier, model };
 }
 
 /**
@@ -219,11 +221,12 @@ export async function scanPaymentSchedule(tenantId, file) {
     'month/period without a full date, use the first day of that month (YYYY-MM-01). amount is a ' +
     'plain number (no currency symbol, dot decimals). Include EVERY payment row; do not include ' +
     'summary/total lines. ' + CYRILLIC_NOTE;
-  const out = await callVision({ tenantId, prompt, file });
+  const { data: out, tier, model } = await callVision({ tenantId, prompt, file });
   const list = Array.isArray(out) ? out : (out.schedule || out.rows || out.payments || []);
-  return list
+  const rows = list
     .map((r) => ({ due_date: r.due_date || r.date || r.month || null, amount: r.amount == null || r.amount === '' ? null : Number(r.amount) }))
     .filter((r) => Number.isFinite(r.amount) && r.amount > 0);
+  return { rows, tier, model };
 }
 
 export async function scanAmortizationDocument(tenantId, file) {
@@ -291,9 +294,9 @@ export async function reconciliationReport(tenantId, { companyName, result }) {
     'користи ставки со црти (-). Ако сè се совпаѓа, кажи го тоа јасно. ' +
     'Врати ЧИСТ JSON: {"report":"...","ok":true|false} каде ok=true само ако нема никакви разлики. ' +
     'Податоци: ' + JSON.stringify(compact);
-  const out = await callText({ tenantId, prompt, json: true });
-  const report = typeof out?.report === 'string' ? out.report : (out?._raw || '');
-  return { report: report.trim(), ok: out?.ok === true };
+  const { data, tier, model } = await callText({ tenantId, prompt, json: true });
+  const report = typeof data?.report === 'string' ? data.report : (data?._raw || '');
+  return { report: report.trim(), ok: data?.ok === true, tier, model };
 }
 
 // List the gemini generateContent-capable models a key can actually use.

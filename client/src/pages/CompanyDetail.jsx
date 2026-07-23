@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
-import { Spinner, StatusBadge, EurBadge, Badge } from '../components/ui.jsx';
+import { Spinner, StatusBadge, EurBadge, Badge, AiBadge } from '../components/ui.jsx';
 import PayModal from '../components/PayModal.jsx';
 import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
@@ -149,6 +149,7 @@ function ReconcileModal({ companyId, companyName, onClose }) {
             </>
           ) : (
             <>
+              {report.ai_tier && <div style={{ marginBottom: 8 }}><AiBadge tier={report.ai_tier} model={report.ai_model} /></div>}
               {report.source === 'ai' && <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>📷 Read from a photo/PDF by Gemini — double-check any borderline rows.</div>}
 
               <div className="grid stat-grid" style={{ marginBottom: 14 }}>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
-import { Modal, Field, Spinner, StatusBadge, EurBadge, Badge, Empty, CurrencyToggle } from '../components/ui.jsx';
+import { Modal, Field, Spinner, StatusBadge, EurBadge, Badge, Empty, CurrencyToggle, AiBadge } from '../components/ui.jsx';
 import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
 export default function Invoices() {
@@ -222,6 +222,7 @@ function ScanModal({ companies, vehicles, onClose, onSaved }) {
         </>
       ) : (
         <>
+          {draft.ai_tier && <div style={{ marginBottom: 10 }}><AiBadge tier={draft.ai_tier} model={draft.ai_model} /></div>}
           <div className="row2">
             <Field label="Invoice #"><input className="input" value={draft.invoice_number || ''} onChange={set('invoice_number')} /></Field>
             <Field label="Date"><input className="input" type="date" value={draft.date || ''} onChange={set('date')} /></Field>

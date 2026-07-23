@@ -41,15 +41,19 @@ export const scan = asyncHandler(async (req, res) => {
 export const scanSchedule = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'Upload a payment schedule (CSV, Excel, PDF or photo)');
   const viaAI = isImageOrPdf(req.file);
-  const schedule = viaAI
-    ? await scanPaymentSchedule(req.tenantId, req.file)
-    : await parseSchedule(req.file);
+  let schedule, aiTier = null, aiModel = null;
+  if (viaAI) {
+    const scanned = await scanPaymentSchedule(req.tenantId, req.file);
+    schedule = scanned.rows; aiTier = scanned.tier; aiModel = scanned.model;
+  } else {
+    schedule = await parseSchedule(req.file);
+  }
   if (!schedule.length) {
     throw new ApiError(400, viaAI
       ? 'Gemini could not read any payments from that file — try a clearer scan'
       : 'Could not read any payments (expected a date/month column and an amount column)');
   }
-  res.json({ schedule, count: schedule.length, source: viaAI ? 'ai' : 'file' });
+  res.json({ schedule, count: schedule.length, source: viaAI ? 'ai' : 'file', ai_tier: aiTier, ai_model: aiModel });
 });
 
 // Create the plan + one tracked installment per schedule row.

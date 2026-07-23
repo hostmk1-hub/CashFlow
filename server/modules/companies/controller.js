@@ -49,9 +49,15 @@ export const installments = asyncHandler(async (req, res) => {
 export const reconcileUpload = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'Upload a CSV, XLSX, PDF or photo of the invoice list');
   const viaAI = isImageOrPdf(req.file);
-  const uploaded = viaAI
-    ? await scanInvoiceListDocument(req.tenantId, req.file)   // photo/PDF → Gemini reads the list
-    : await parseInvoiceList(req.file);                       // CSV/XLSX → parse directly
+  let scanTier = null;
+  let uploaded;
+  if (viaAI) {
+    const scanned = await scanInvoiceListDocument(req.tenantId, req.file); // photo/PDF → Gemini reads the list
+    uploaded = scanned.rows;
+    scanTier = scanned.tier;
+  } else {
+    uploaded = await parseInvoiceList(req.file);                            // CSV/XLSX → parse directly
+  }
   if (!uploaded.length) {
     throw new ApiError(
       400,
@@ -97,5 +103,11 @@ export const reconcileUpload = asyncHandler(async (req, res) => {
       .catch((e) => console.warn('[reconcile] notify failed:', e.message));
   }
 
-  res.json({ ...result, source: viaAI ? 'ai' : 'file', aiReport });
+  res.json({
+    ...result,
+    source: viaAI ? 'ai' : 'file',
+    aiReport,
+    ai_tier: aiReport?.tier || scanTier || null,   // which Gemini tier actually ran
+    ai_model: aiReport?.model || null,
+  });
 });

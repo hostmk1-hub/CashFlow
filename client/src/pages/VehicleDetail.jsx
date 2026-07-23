@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
-import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge } from '../components/ui.jsx';
+import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge, AiBadge } from '../components/ui.jsx';
 import PaymentScheduleModal from '../components/PaymentScheduleModal.jsx';
 
 function utilTone(u) { return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
@@ -199,6 +199,7 @@ function VehicleScanModal({ vehicleId, plate, companies, onClose, onSaved }) {
         </>
       ) : (
         <>
+          {draft.ai_tier && <div style={{ marginBottom: 8 }}><AiBadge tier={draft.ai_tier} model={draft.ai_model} /></div>}
           <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Saving to <b>{plate}</b>{draft.matched_vehicle_by === 'lease_number' ? ' (matched by lease number)' : ''}.</div>
           <div className="row2">
             <Field label="Invoice #"><input className="input" value={draft.invoice_number || ''} onChange={set('invoice_number')} /></Field>
@@ -263,7 +264,7 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
         interest_rate: draft.interest_rate ?? '', start_date: draft.start_date ?? prev.start_date,
         currency: draft.currency || 'MKD',
       }));
-      setScanInfo({ vendor: draft.vendor_name, matched: !!draft.matched_company_id });
+      setScanInfo({ vendor: draft.vendor_name, matched: !!draft.matched_company_id, tier: draft.ai_tier, model: draft.ai_model });
       setMode('manual');
     } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   }
@@ -312,6 +313,7 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
         <>
           {scanInfo && (
             <div className="preview-box" style={{ marginBottom: 12 }}>
+              {scanInfo.tier && <div style={{ marginBottom: 6 }}><AiBadge tier={scanInfo.tier} model={scanInfo.model} /></div>}
               📄 Read from the uploaded document. {scanInfo.matched
                 ? <>Leasing company matched to <b>the selection below</b> — please double-check.</>
                 : scanInfo.vendor
