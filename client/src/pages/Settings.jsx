@@ -94,8 +94,8 @@ export default function Settings() {
           <div className="toolbar">
             <button className="btn" disabled={!canManage || !geminiKeyPaid} onClick={() => { saveSetting('gemini_api_key_paid', geminiKeyPaid); setGeminiKeyPaid(''); }}>Update paid key</button>
           </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Scans use the free key first; the paid key is only used when the free one hits its quota/rate limit.</div>
-          <Field label="Model (for scanning invoices & autofill)">
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Scanning always tries the <b>free key + free model</b> first; the paid key (and its model) is used only when the free one hits its quota/rate limit or fails.</div>
+          <Field label="Free-tier model (tried first for every scan)">
             {(() => {
               const current = settings.gemini_model || 'gemini-2.5-flash';
               const fetched = (models?.models || []).map((m) => m.name);
@@ -116,6 +116,19 @@ export default function Settings() {
                 : models.reason === 'no-key' ? 'Add & save an API key, then ↻ to load your available models (showing common models for now).'
                 : 'Could not fetch models — showing common models. Check the key with Test Connection.'}
             </div>
+          </Field>
+          <Field label="Paid-tier model (fallback — optional)">
+            {(() => {
+              const fetched = (models?.models || []).map((m) => m.name);
+              const opts = fetched.length ? fetched : FALLBACK_MODELS;
+              return (
+                <select className="select" value={settings.gemini_model_paid || ''} disabled={!canManage} onChange={(e) => saveSetting('gemini_model_paid', e.target.value)}>
+                  <option value="">Same as free model</option>
+                  {opts.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              );
+            })()}
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Used only on the paid-key fallback. Leave as “same” unless you want a bigger paid model when the free tier is exhausted.</div>
           </Field>
         </div>
 

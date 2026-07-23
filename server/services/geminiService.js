@@ -37,14 +37,26 @@ async function resolveKey(tenantId) {
   return keys[0]?.key || '';
 }
 
-async function resolveModel(tenantId) {
-  const { rows } = await query(
-    `SELECT value FROM settings WHERE tenant_id = $1 AND key = 'gemini_model'`,
-    [tenantId],
-  );
-  const raw = rows[0]?.value || config.gemini.model;
+async function readModelKey(tenantId, key) {
+  const { rows } = await query(`SELECT value FROM settings WHERE tenant_id = $1 AND key = $2`, [tenantId, key]);
   // Tolerate a stored "models/…" prefix or stray whitespace.
-  return String(raw).trim().replace(/^models\//, '');
+  return rows[0]?.value ? String(rows[0].value).trim().replace(/^models\//, '') : null;
+}
+
+async function resolveModel(tenantId) {
+  return (await readModelKey(tenantId, 'gemini_model')) || config.gemini.model;
+}
+
+/**
+ * Models to use per key tier. The FREE key always uses the primary (free-tier)
+ * model; the PAID key uses its own model if one is configured, otherwise the
+ * same model — so scanning always tries the cheap path first and only the paid
+ * fallback may use a bigger/paid model.
+ */
+async function resolveModels(tenantId) {
+  const free = (await readModelKey(tenantId, 'gemini_model')) || config.gemini.model;
+  const paid = (await readModelKey(tenantId, 'gemini_model_paid')) || free;
+  return { free, paid };
 }
 
 const CYRILLIC_NOTE =
@@ -102,7 +114,7 @@ async function callWithFallback({ tenantId, requester }) {
   let lastErr = null;
   for (const { key, tier } of keys) {
     try {
-      const resp = await requester(key);
+      const resp = await requester(key, tier);
       if (resp.ok) {
         const json = await resp.json();
         const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
@@ -121,16 +133,17 @@ async function callWithFallback({ tenantId, requester }) {
   throw lastErr;
 }
 
-function callVision({ tenantId, model, prompt, file }) {
-  return callWithFallback({ tenantId, requester: (apiKey) => requestOnce({ apiKey, model, prompt, file }) });
+async function callVision({ tenantId, prompt, file }) {
+  const models = await resolveModels(tenantId);
+  return callWithFallback({ tenantId, requester: (apiKey, tier) => requestOnce({ apiKey, model: models[tier] || models.free, prompt, file }) });
 }
 
-function callText({ tenantId, model, prompt, json = false }) {
-  return callWithFallback({ tenantId, requester: (apiKey) => requestText({ apiKey, model, prompt, json }) });
+async function callText({ tenantId, prompt, json = false }) {
+  const models = await resolveModels(tenantId);
+  return callWithFallback({ tenantId, requester: (apiKey, tier) => requestText({ apiKey, model: models[tier] || models.free, prompt, json }) });
 }
 
 export async function scanInvoiceDocument(tenantId, file) {
-  const model = await resolveModel(tenantId);
   const prompt =
     'You are an invoice/receipt data extractor. Return ONLY JSON with keys: ' +
     'invoice_number, description, amount (number), currency (MKD or EUR), date (YYYY-MM-DD), ' +
@@ -138,7 +151,7 @@ export async function scanInvoiceDocument(tenantId, file) {
     'lease_number (any lease/contract/policy/chassis (VIN) or reference number that identifies a specific ' +
     'vehicle, as printed, or null). ' +
     CYRILLIC_NOTE;
-  return callVision({ tenantId, model, prompt, file });
+  return callVision({ tenantId, prompt, file });
 }
 
 /**
@@ -148,7 +161,6 @@ export async function scanInvoiceDocument(tenantId, file) {
  * of { invoice_number, amount, status } for the reconcile engine.
  */
 export async function scanInvoiceListDocument(tenantId, file) {
-  const model = await resolveModel(tenantId);
   const prompt =
     'You are extracting a supplier invoice statement (a list of invoices, possibly ' +
     'many rows across one or more pages). Return ONLY JSON in the exact shape ' +
@@ -159,7 +171,7 @@ export async function scanInvoiceListDocument(tenantId, file) {
     '(платено/плат./yes/да), "unpaid" if marked open/due, otherwise null. ' +
     'Do not invent rows and do not include summary/total lines as invoices. ' +
     CYRILLIC_NOTE;
-  const out = await callVision({ tenantId, model, prompt, file });
+  const out = await callVision({ tenantId, prompt, file });
   const list = Array.isArray(out) ? out : (out.invoices || out.rows || []);
   return list
     .filter((r) => r && (r.invoice_number != null) && String(r.invoice_number).trim() !== '')
@@ -177,7 +189,6 @@ export async function scanInvoiceListDocument(tenantId, file) {
  * each month's exact amount (no total/monthly formula).
  */
 export async function scanPaymentSchedule(tenantId, file) {
-  const model = await resolveModel(tenantId);
   const prompt =
     'You are extracting a lease/loan amortization PAYMENT SCHEDULE — a table with one ' +
     'row per monthly payment. Return ONLY JSON {"schedule":[{"due_date":"YYYY-MM-DD","amount":<number>}]} ' +
@@ -186,7 +197,7 @@ export async function scanPaymentSchedule(tenantId, file) {
     'month/period without a full date, use the first day of that month (YYYY-MM-01). amount is a ' +
     'plain number (no currency symbol, dot decimals). Include EVERY payment row; do not include ' +
     'summary/total lines. ' + CYRILLIC_NOTE;
-  const out = await callVision({ tenantId, model, prompt, file });
+  const out = await callVision({ tenantId, prompt, file });
   const list = Array.isArray(out) ? out : (out.schedule || out.rows || out.payments || []);
   return list
     .map((r) => ({ due_date: r.due_date || r.date || r.month || null, amount: r.amount == null || r.amount === '' ? null : Number(r.amount) }))
@@ -194,7 +205,6 @@ export async function scanPaymentSchedule(tenantId, file) {
 }
 
 export async function scanAmortizationDocument(tenantId, file) {
-  const model = await resolveModel(tenantId);
   const prompt =
     'You are a leasing-schedule data extractor. Return ONLY JSON with keys: ' +
     'total_amount (number), down_payment (number), monthly_amount (number), months_total (integer), ' +
@@ -202,7 +212,7 @@ export async function scanAmortizationDocument(tenantId, file) {
     'lease_number (the lease/contract number as printed, or null), ' +
     'vendor_name (the leasing company / lessor name exactly as printed, or null). ' +
     CYRILLIC_NOTE;
-  return callVision({ tenantId, model, prompt, file });
+  return callVision({ tenantId, prompt, file });
 }
 
 /**
@@ -240,7 +250,6 @@ export async function listModels(tenantId) {
  * Macedonian. Best-effort: throws if no key / Gemini fails, callers catch.
  */
 export async function reconciliationReport(tenantId, { companyName, result }) {
-  const model = await resolveModel(tenantId);
   // Trim the payload so the prompt stays small even for long lists.
   const compact = {
     company: companyName,
@@ -260,7 +269,7 @@ export async function reconciliationReport(tenantId, { companyName, result }) {
     'користи ставки со црти (-). Ако сè се совпаѓа, кажи го тоа јасно. ' +
     'Врати ЧИСТ JSON: {"report":"...","ok":true|false} каде ok=true само ако нема никакви разлики. ' +
     'Податоци: ' + JSON.stringify(compact);
-  const out = await callText({ tenantId, model, prompt, json: true });
+  const out = await callText({ tenantId, prompt, json: true });
   const report = typeof out?.report === 'string' ? out.report : (out?._raw || '');
   return { report: report.trim(), ok: out?.ok === true };
 }
