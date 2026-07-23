@@ -47,16 +47,28 @@ async function resolveModel(tenantId) {
   return (await readModelKey(tenantId, 'gemini_model')) || config.gemini.model;
 }
 
+// Curated fast, valid free models, tried in order. Keeping the list to
+// current/valid names avoids wasting round-trips on deprecated endpoints that
+// only 404. "gemini-flash-latest" auto-tracks the newest flash so the sequence
+// keeps working as models roll over.
+const FREE_MODELS = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.6-flash'];
+
+const dedupe = (arr) => [...new Set(arr.filter(Boolean))];
+
 /**
- * Models to use per key tier. The FREE key always uses the primary (free-tier)
- * model; the PAID key uses its own model if one is configured, otherwise the
- * same model — so scanning always tries the cheap path first and only the paid
- * fallback may use a bigger/paid model.
+ * Model sequences per key tier. The configured model is tried first, then the
+ * curated valid free models as automatic fallbacks — so a deprecated/unknown
+ * model name (404) skips straight to the next valid one instead of failing the
+ * scan. The FREE key always runs the free sequence; the PAID key uses its own
+ * model first (if configured) then the same curated list.
  */
-async function resolveModels(tenantId) {
-  const free = (await readModelKey(tenantId, 'gemini_model')) || config.gemini.model;
-  const paid = (await readModelKey(tenantId, 'gemini_model_paid')) || free;
-  return { free, paid };
+async function resolveModelSeqs(tenantId) {
+  const configured = (await readModelKey(tenantId, 'gemini_model')) || config.gemini.model;
+  const paidConfigured = await readModelKey(tenantId, 'gemini_model_paid');
+  return {
+    free: dedupe([configured, ...FREE_MODELS]),
+    paid: dedupe([paidConfigured || configured, ...FREE_MODELS]),
+  };
 }
 
 const CYRILLIC_NOTE =
@@ -98,49 +110,59 @@ async function requestText({ apiKey, model, prompt, json = false }) {
   });
 }
 
+const isModelNotFound = (status, text) => status === 404 || /not found|not supported|is not found for API/i.test(text || '');
+
 /**
- * Runs the request against the free key first; on failure (429 quota/rate-limit,
- * 401/403 auth, or 5xx) falls through to the paid key. Only the last error is
- * surfaced if every key fails. `requester` builds the fetch for a given key so
- * both the vision (file) and text-only paths share the fallback logic.
+ * Free key first, then paid. Within each key, try the tier's model sequence:
+ * on a model-not-found (404 / deprecated name) skip instantly to the next model
+ * with the SAME key; on quota/rate-limit/auth/5xx the key itself is the problem,
+ * so jump straight to the next key (no wasted round-trips). `buildReq(key,model)`
+ * builds the fetch, shared by the vision (file) and text-only paths.
  */
-async function callWithFallback({ tenantId, requester }) {
+async function callWithFallback({ tenantId, buildReq }) {
   const keys = await resolveKeys(tenantId);
   if (!keys.length) {
     const err = new Error('No Gemini API key configured. Add one in Settings → AI Integration.');
     err.status = 400;
     throw err;
   }
+  const seqs = await resolveModelSeqs(tenantId);
   let lastErr = null;
   for (const { key, tier } of keys) {
-    try {
-      const resp = await requester(key, tier);
-      if (resp.ok) {
-        const json = await resp.json();
-        const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        try { return JSON.parse(raw); } catch { return { _raw: raw }; }
+    const models = seqs[tier] || seqs.free;
+    for (const model of models) {
+      try {
+        const resp = await buildReq(key, model);
+        if (resp.ok) {
+          const json = await resp.json();
+          const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+          try { return JSON.parse(raw); } catch { return { _raw: raw }; }
+        }
+        const text = await resp.text();
+        lastErr = new Error(`Gemini (${tier} key, ${model}) failed: ${resp.status} ${text.slice(0, 200)}`);
+        lastErr.status = 502;
+        if (isModelNotFound(resp.status, text)) {
+          console.warn(`[gemini] ${model} not available (${resp.status}) — trying next model`);
+          continue; // next model, same key
+        }
+        console.warn(`[gemini] ${tier} key returned ${resp.status} — moving to next key`);
+        break; // quota/auth/5xx: this key won't help, go to the next key
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[gemini] ${tier} key network error: ${e.message} — moving to next key`);
+        break;
       }
-      const text = await resp.text();
-      lastErr = new Error(`Gemini (${tier} key) failed: ${resp.status} ${text.slice(0, 300)}`);
-      lastErr.status = 502;
-      console.warn(`[gemini] ${tier} key returned ${resp.status}${keys.length > 1 && tier === 'free' ? ' — trying paid key' : ''}`);
-      // fall through to the next key
-    } catch (e) {
-      lastErr = e;
-      console.warn(`[gemini] ${tier} key error: ${e.message}`);
     }
   }
   throw lastErr;
 }
 
-async function callVision({ tenantId, prompt, file }) {
-  const models = await resolveModels(tenantId);
-  return callWithFallback({ tenantId, requester: (apiKey, tier) => requestOnce({ apiKey, model: models[tier] || models.free, prompt, file }) });
+function callVision({ tenantId, prompt, file }) {
+  return callWithFallback({ tenantId, buildReq: (apiKey, model) => requestOnce({ apiKey, model, prompt, file }) });
 }
 
-async function callText({ tenantId, prompt, json = false }) {
-  const models = await resolveModels(tenantId);
-  return callWithFallback({ tenantId, requester: (apiKey, tier) => requestText({ apiKey, model: models[tier] || models.free, prompt, json }) });
+function callText({ tenantId, prompt, json = false }) {
+  return callWithFallback({ tenantId, buildReq: (apiKey, model) => requestText({ apiKey, model, prompt, json }) });
 }
 
 export async function scanInvoiceDocument(tenantId, file) {

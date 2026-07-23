@@ -20,7 +20,9 @@ export default function Settings() {
   const [models, setModels] = useState(null); // { ok, models: [] }
   const canManage = ['owner', 'admin'].includes(activeTenant?.role);
   const EXPENSE_CATEGORIES = ['Leasing', 'Insurance', 'Repairs', 'Service', 'Tires', 'Other'];
-  const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+  // Fast, valid free models first (auto model-fallback skips any that 404),
+  // plus a pro option for the paid-tier fallback.
+  const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.6-flash', 'gemini-2.5-pro'];
 
   const load = () => {
     api.get('/settings').then((s) => {
