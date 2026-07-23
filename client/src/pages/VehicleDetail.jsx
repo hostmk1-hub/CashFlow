@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
-import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge, AiBadge } from '../components/ui.jsx';
+import { Spinner, Badge, Modal, Field, CurrencyToggle, EurBadge, AiBadge, Dropzone } from '../components/ui.jsx';
 import PaymentScheduleModal from '../components/PaymentScheduleModal.jsx';
 
 function utilTone(u) { return u >= 70 ? 'green' : u >= 40 ? 'yellow' : 'red'; }
@@ -170,8 +170,7 @@ function VehicleScanModal({ vehicleId, plate, companies, onClose, onSaved }) {
   const [err, setErr] = useState('');
   const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
 
-  async function onFile(e) {
-    const file = e.target.files[0];
+  async function onFile(file) {
     if (!file) return;
     setBusy(true); setErr('');
     try {
@@ -194,8 +193,7 @@ function VehicleScanModal({ vehicleId, plate, companies, onClose, onSaved }) {
       {!draft ? (
         <>
           <p className="muted">Upload a photo or PDF of the invoice/expense. Gemini reads the fields and it’s saved against <b>{plate}</b>. Nothing saves until you confirm.</p>
-          <input type="file" accept="image/*,application/pdf" onChange={onFile} />
-          {busy && <Spinner />}
+          <Dropzone accept="image/*,application/pdf" onFiles={(files) => onFile(files[0])} busy={busy} hint="Photo or PDF" />
         </>
       ) : (
         <>
@@ -246,8 +244,7 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
   const [scanInfo, setScanInfo] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
-  async function onScan(e) {
-    const file = e.target.files[0];
+  async function onScan(file) {
     if (!file) return;
     setBusy(true); setErr('');
     try {
@@ -306,8 +303,7 @@ function AmortizationModal({ vehicleId, plan, companies, onClose, onSaved }) {
       {mode === 'scan' ? (
         <>
           <p className="muted">Upload a photo/PDF of the lease schedule. Gemini extracts the numbers (Cyrillic supported) and pre-fills the form for review — nothing saves until you confirm.</p>
-          <input type="file" accept="image/*,application/pdf" onChange={onScan} />
-          {busy && <Spinner />}
+          <Dropzone accept="image/*,application/pdf" onFiles={(files) => onScan(files[0])} busy={busy} hint="Photo or PDF of the lease schedule" />
         </>
       ) : (
         <>

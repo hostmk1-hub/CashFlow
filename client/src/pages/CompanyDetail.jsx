@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
-import { Spinner, StatusBadge, EurBadge, Badge, AiBadge } from '../components/ui.jsx';
+import { Spinner, StatusBadge, EurBadge, Badge, AiBadge, Dropzone } from '../components/ui.jsx';
 import PayModal from '../components/PayModal.jsx';
 import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
@@ -125,8 +125,7 @@ function ReconcileModal({ companyId, companyName, onClose }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  async function onFile(e) {
-    const file = e.target.files[0];
+  async function onFile(file) {
     if (!file) return;
     setBusy(true); setErr('');
     try {
@@ -144,8 +143,7 @@ function ReconcileModal({ companyId, companyName, onClose }) {
           {!report ? (
             <>
               <p className="muted">Upload the invoice list the company sent you — a <b>CSV/Excel</b> file, or a <b>photo or PDF</b> of their statement. Photos and PDFs are read by Gemini automatically. We match it against our records by <b>invoice number</b> and flag anything missing or different, and compare the grand totals (theirs vs ours).</p>
-              <input type="file" accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" onChange={onFile} />
-              {busy && <><Spinner /><span className="muted" style={{ marginLeft: 8 }}>Reading the list…</span></>}
+              <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" onFiles={(files) => onFile(files[0])} busy={busy} hint={busy ? 'Reading the list…' : 'CSV, Excel, PDF or photo'} />
             </>
           ) : (
             <>

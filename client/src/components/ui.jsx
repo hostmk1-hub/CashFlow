@@ -1,4 +1,40 @@
 // Small shared UI primitives used across pages.
+import { useState, useRef } from 'react';
+
+/**
+ * Drag-and-drop file zone (also click-to-browse). Calls onFiles(File[]) — always
+ * an array. Pass multiple to allow selecting/dropping several files at once.
+ */
+export function Dropzone({ accept, multiple = false, onFiles, busy, hint }) {
+  const inputRef = useRef(null);
+  const [over, setOver] = useState(false);
+  const pick = (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length) onFiles(multiple ? files : [files[0]]);
+  };
+  return (
+    <div
+      className={`dropzone${over ? ' over' : ''}${busy ? ' busy' : ''}`}
+      role="button" tabIndex={0}
+      onClick={() => !busy && inputRef.current?.click()}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !busy) inputRef.current?.click(); }}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy) pick(e.dataTransfer.files); }}
+    >
+      <input ref={inputRef} type="file" accept={accept} multiple={multiple} style={{ display: 'none' }}
+        onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
+      {busy ? <Spinner /> : (
+        <div className="dz-inner">
+          <div className="dz-icon">⬆</div>
+          <div className="dz-text"><b>Drag &amp; drop</b> {multiple ? 'files' : 'a file'} here, or <span className="dz-link">browse</span></div>
+          {hint && <div className="dz-hint muted">{hint}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Modal({ title, onClose, children, footer, wide }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>

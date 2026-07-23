@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd, date } from '../lib/format.js';
-import { Modal, Field, Spinner, StatusBadge, EurBadge, Badge, Empty, CurrencyToggle, AiBadge } from '../components/ui.jsx';
+import { Modal, Field, Spinner, StatusBadge, EurBadge, Badge, Empty, CurrencyToggle, AiBadge, Dropzone } from '../components/ui.jsx';
 import MarkPaidModal from '../components/MarkPaidModal.jsx';
 
 export default function Invoices() {
@@ -188,80 +188,103 @@ function AddInvoiceModal({ invoice, companies, vehicles, workers, onClose, onSav
 }
 
 function ScanModal({ companies, vehicles, onClose, onSaved }) {
-  const [draft, setDraft] = useState(null);
+  const [drafts, setDrafts] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(null); // { done, total }
   const [err, setErr] = useState('');
 
-  async function onFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setBusy(true); setErr('');
-    try {
-      const fd = new FormData(); fd.append('file', file);
-      const d = await api.upload('/invoices/scan', fd);
-      setDraft(d);
-    } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
+  async function onFiles(files) {
+    setBusy(true); setErr(''); setProgress({ done: 0, total: files.length });
+    const added = [];
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const fd = new FormData(); fd.append('file', files[i]);
+        const d = await api.upload('/invoices/scan', fd);
+        added.push({ ...d, _name: files[i].name, installments: 1 });
+      } catch (ex) { setErr(`${files[i].name}: ${ex.message}`); }
+      setProgress({ done: i + 1, total: files.length });
+    }
+    setDrafts((prev) => [...prev, ...added]);
+    setBusy(false); setProgress(null);
   }
-  async function confirm() {
-    setBusy(true); setErr('');
-    try { await api.post('/invoices/scan/confirm', draft); onSaved(); }
-    catch (ex) { setErr(ex.message); setBusy(false); }
-  }
-  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value });
-  const inst = Math.max(1, Number(draft?.installments) || 1);
+  const patch = (idx, p) => setDrafts((prev) => prev.map((d, i) => (i === idx ? { ...d, ...p } : d)));
+  const removeAt = (idx) => setDrafts((prev) => prev.filter((_, i) => i !== idx));
 
+  async function saveAll() {
+    setBusy(true); setErr('');
+    let saved = 0; const failed = [];
+    for (const d of drafts) {
+      try { await api.post('/invoices/scan/confirm', d); saved++; }
+      catch (ex) { failed.push(`${d._name || d.invoice_number || 'invoice'}: ${ex.message}`); }
+    }
+    if (failed.length) { setErr(`Saved ${saved}. Failed: ${failed.join('; ')}`); setBusy(false); if (saved) onSaved(); }
+    else onSaved();
+  }
+
+  const hint = progress ? `Scanning ${progress.done}/${progress.total}…` : 'Photos or PDFs · drop several at once';
   return (
-    <Modal title="Scan Invoice / Receipt" onClose={onClose} wide
-      footer={draft && <><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy} onClick={confirm}>Confirm & save</button></>}>
+    <Modal title="Scan Invoices / Receipts" onClose={onClose} wide
+      footer={drafts.length > 0 && <><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn" disabled={busy} onClick={saveAll}>{busy ? 'Saving…' : `Save all ${drafts.length} invoice${drafts.length > 1 ? 's' : ''}`}</button></>}>
       {err && <div className="error-msg">{err}</div>}
-      {!draft ? (
+      {drafts.length === 0 ? (
         <>
-          <p className="muted">Upload a photo or PDF. Gemini extracts the fields (Cyrillic/Latin/Turkish supported) and matches the plate + vendor. Nothing saves until you confirm.</p>
-          <input type="file" accept="image/*,application/pdf" onChange={onFile} />
-          {busy && <Spinner />}
+          <p className="muted">Drop one or several invoice/receipt photos or PDFs. Gemini reads each (Cyrillic/Latin/Turkish) and matches the plate/lease + vendor. Nothing saves until you confirm.</p>
+          <Dropzone accept="image/*,application/pdf" multiple onFiles={onFiles} busy={busy} hint={hint} />
         </>
       ) : (
         <>
-          {draft.ai_tier && <div style={{ marginBottom: 10 }}><AiBadge tier={draft.ai_tier} model={draft.ai_model} /></div>}
-          <div className="row2">
-            <Field label="Invoice #"><input className="input" value={draft.invoice_number || ''} onChange={set('invoice_number')} /></Field>
-            <Field label="Date"><input className="input" type="date" value={draft.date || ''} onChange={set('date')} /></Field>
+          <div style={{ display: 'grid', gap: 12 }}>
+            {drafts.map((d, i) => <DraftCard key={i} draft={d} idx={i} companies={companies} vehicles={vehicles} onChange={patch} onRemove={removeAt} />)}
           </div>
-          <Field label="Description"><input className="input" value={draft.description || ''} onChange={set('description')} /></Field>
-          <div className="row2">
-            <Field label="Amount"><input className="input" type="number" value={draft.amount || ''} onChange={set('amount')} /></Field>
-            <Field label="Currency"><CurrencyToggle value={draft.currency} onChange={(c) => setDraft({ ...draft, currency: c })} /></Field>
+          <div style={{ marginTop: 12 }}>
+            <Dropzone accept="image/*,application/pdf" multiple onFiles={onFiles} busy={busy} hint={progress ? hint : 'Add more invoices'} />
           </div>
-          <Field label={`Company ${draft.vendor_name ? '(detected: ' + draft.vendor_name + ')' : ''}`}>
-            <select className="select" value={draft.matched_company_id || ''} onChange={(e) => setDraft({ ...draft, matched_company_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">— pick company —</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </Field>
-          <Field label={`Vehicle ${draft.detected_plate ? '(detected plate: ' + draft.detected_plate + ')' : ''}`}>
-            <select className="select" value={draft.matched_vehicle_id || ''} onChange={(e) => setDraft({ ...draft, matched_vehicle_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}
-            </select>
-          </Field>
-          <Field label="Category">
-            <select className="select" value={draft.category || ''} onChange={set('category')}>
-              <option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
-            </select>
-          </Field>
-          <Field label="Installments">
-            <div className="seg" style={{ flexWrap: 'wrap' }}>
-              {INSTALLMENT_PRESETS.map((p) => (
-                <button type="button" key={p} className={inst === p ? 'on' : ''} onClick={() => setDraft({ ...draft, installments: p })}>{p === 1 ? 'One-time' : `${p}×`}</button>
-              ))}
-              <input className="input" type="number" min={1} max={360} style={{ width: 74 }} value={draft.installments || 1} onChange={set('installments')} title="Custom number of monthly installments" />
-            </div>
-          </Field>
-          {inst > 1 && Number(draft.amount) > 0 && (
-            <div className="preview-box">
-              One invoice for the full <b>{new Intl.NumberFormat('mk-MK').format(Number(draft.amount))} {draft.currency === 'EUR' ? '€' : 'ден'}</b>, payable in <b>{inst} monthly installments</b> of about <b>{new Intl.NumberFormat('mk-MK').format(Math.round(Number(draft.amount) / inst))} {draft.currency === 'EUR' ? '€' : 'ден'}</b> each. Mark each month paid from the company’s Installments tab.
-            </div>
-          )}
         </>
       )}
     </Modal>
+  );
+}
+
+function DraftCard({ draft, idx, companies, vehicles, onChange, onRemove }) {
+  const set = (k) => (e) => onChange(idx, { [k]: e.target.value });
+  return (
+    <div className="card pad" style={{ borderLeft: '3px solid var(--brand)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <b>#{idx + 1}</b>{draft._name && <span className="muted" style={{ fontSize: 12 }}>{draft._name}</span>}
+          {draft.ai_tier && <AiBadge tier={draft.ai_tier} model={draft.ai_model} />}
+        </span>
+        <button className="btn ghost sm" title="Remove" onClick={() => onRemove(idx)}>✕</button>
+      </div>
+      <div className="row2">
+        <Field label="Invoice #"><input className="input" value={draft.invoice_number || ''} onChange={set('invoice_number')} /></Field>
+        <Field label="Date"><input className="input" type="date" value={draft.date || ''} onChange={set('date')} /></Field>
+      </div>
+      <Field label="Description"><input className="input" value={draft.description || ''} onChange={set('description')} /></Field>
+      <div className="row2">
+        <Field label="Amount"><input className="input" type="number" value={draft.amount || ''} onChange={set('amount')} /></Field>
+        <Field label="Currency"><CurrencyToggle value={draft.currency} onChange={(c) => onChange(idx, { currency: c })} /></Field>
+      </div>
+      <div className="row2">
+        <Field label={`Company ${draft.vendor_name ? '(det: ' + draft.vendor_name + ')' : ''}`}>
+          <select className="select" value={draft.matched_company_id || ''} onChange={(e) => onChange(idx, { matched_company_id: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">— pick company —</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+        <Field label={`Vehicle ${draft.matched_vehicle_by === 'lease_number' ? '(by lease #)' : draft.detected_plate ? '(plate: ' + draft.detected_plate + ')' : ''}`}>
+          <select className="select" value={draft.matched_vehicle_id || ''} onChange={(e) => onChange(idx, { matched_vehicle_id: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="row2">
+        <Field label="Category">
+          <select className="select" value={draft.category || ''} onChange={set('category')}>
+            <option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+          </select>
+        </Field>
+        <Field label="Installments"><input className="input" type="number" min={1} max={360} value={draft.installments || 1} onChange={set('installments')} /></Field>
+      </div>
+    </div>
   );
 }

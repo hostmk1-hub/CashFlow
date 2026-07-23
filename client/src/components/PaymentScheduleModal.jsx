@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { mkd } from '../lib/format.js';
-import { Modal, Field, Spinner, CurrencyToggle, AiBadge } from './ui.jsx';
+import { Modal, Field, Spinner, CurrencyToggle, AiBadge, Dropzone } from './ui.jsx';
 
 /**
  * Upload a leasing company's monthly payment schedule (CSV/Excel/photo/PDF) for
@@ -22,8 +22,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
 
   useEffect(() => { api.get('/companies').then(setCompanies).catch(() => {}); }, []);
 
-  async function onFile(e) {
-    const file = e.target.files[0];
+  async function onFile(file) {
     if (!file) return;
     setBusy(true); setErr('');
     try {
@@ -65,8 +64,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
       {!rows ? (
         <>
           <p className="muted">Upload the leasing company's monthly payment plan for <b>{plate}</b> — a <b>CSV/Excel</b> file, or a <b>photo/PDF</b> of the schedule. We read each month's amount and create one tracked payment per month for this car (up to 120 months). Nothing saves until you confirm.</p>
-          <input className="input" type="file" accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" onChange={onFile} />
-          {busy && <><Spinner /><span className="muted" style={{ marginLeft: 8 }}>Reading the schedule…</span></>}
+          <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" onFiles={(files) => onFile(files[0])} busy={busy} hint={busy ? 'Reading the schedule…' : 'CSV, Excel, PDF or photo'} />
         </>
       ) : (
         <>
