@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Field, Spinner, Badge } from '../components/ui.jsx';
+import CompanyInvoiceSettings from '../components/CompanyInvoiceSettings.jsx';
 
 export default function Settings() {
   const { activeTenant } = useAuth();
@@ -202,6 +203,12 @@ export default function Settings() {
             <button className="btn ghost" disabled title="Integration point — wire to RENTALsyst API">Sync Now</button>
           </div>
         </div>
+      </div>
+
+      <div className="card pad" style={{ marginTop: 16 }}>
+        <h3 className="card-title">Company details for invoices (Компанија / ФАКТУРА)</h3>
+        <p className="muted" style={{ marginTop: -6 }}>Feeds every generated invoice PDF — header, tax number, ДДВ, bank accounts, signatures, footer and logo.</p>
+        <CompanyInvoiceSettings canManage={canManage} onSaved={load} />
       </div>
 
       <div className="card pad" style={{ marginTop: 16 }}>

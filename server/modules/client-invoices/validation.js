@@ -1,1 +1,5 @@
-export { createClientInvoiceSchema, updateClientInvoiceSchema } from '../../schemas/clientInvoices.js';
+export {
+  createClientInvoiceSchema,
+  updateClientInvoiceSchema,
+  clientInvoiceStatusSchema,
+} from '../../schemas/clientInvoices.js';

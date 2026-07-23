@@ -7,6 +7,9 @@ export const createCompanySchema = z.object({
   category: z.string().max(20).nullish(),
   phone: z.string().max(50).nullish(),
   note: z.string().nullish(),
+  tax_number: z.string().max(50).nullish(),
+  address: z.string().nullish(),
+  email: z.string().max(200).nullish(),
 });
 
 export const updateCompanySchema = createCompanySchema.partial();

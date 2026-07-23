@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { settingSchema } from './validation.js';
 import { asyncHandler, ApiError } from '../../shared/http.js';
 import { requireMinRole } from '../../shared/middleware/auth.js';
@@ -9,8 +10,24 @@ import { runBackup, lastBackup, lastVerification } from '../../services/backupSe
 import { r2Enabled, smtpEnabled } from '../../shared/config.js';
 import { sendAdminMail } from '../../services/mailer.js';
 import { testEmail } from '../../services/emailTemplates.js';
+import { getInvoiceSettings, saveInvoiceSettings, saveInvoiceLogo } from '../../services/invoiceSettings.js';
 
 const router = Router();
+const logoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+
+// ===== Company profile for invoices (header, banks, VAT, signatures, footer) =====
+router.get('/company', asyncHandler(async (req, res) => {
+  res.json(await getInvoiceSettings(req.tenantId));
+}));
+router.put('/company', requireMinRole('manager'), asyncHandler(async (req, res) => {
+  res.json(await saveInvoiceSettings(req.tenantId, req.body || {}));
+}));
+router.post('/company/logo', requireMinRole('manager'), logoUpload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, 'Attach a logo image');
+  if (!req.file.mimetype?.startsWith('image/')) throw new ApiError(400, 'Logo must be an image');
+  const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+  res.json(await saveInvoiceLogo(req.tenantId, dataUrl));
+}));
 
 // Keys whose stored value is encrypted and must never be returned in plaintext.
 const SECRET_KEYS = new Set(['gemini_api_key', 'gemini_api_key_paid', 'rentalsyst_api_key']);

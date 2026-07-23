@@ -30,9 +30,10 @@ export function getById(tenantId, id) {
 
 export function create(tenantId, data) {
   return query(
-    `INSERT INTO companies (tenant_id, name, type, category, phone, note)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [tenantId, data.name, data.type || 'vendor', data.category || null, data.phone || null, data.note || null],
+    `INSERT INTO companies (tenant_id, name, type, category, phone, note, tax_number, address, email)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [tenantId, data.name, data.type || 'vendor', data.category || null, data.phone || null, data.note || null,
+     data.tax_number || null, data.address || null, data.email || null],
   ).then((r) => r.rows[0]);
 }
 
@@ -43,9 +44,13 @@ export function update(tenantId, id, data) {
        type = COALESCE($4, type),
        category = COALESCE($5, category),
        phone = COALESCE($6, phone),
-       note = COALESCE($7, note)
+       note = COALESCE($7, note),
+       tax_number = COALESCE($8, tax_number),
+       address = COALESCE($9, address),
+       email = COALESCE($10, email)
      WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-    [tenantId, id, data.name ?? null, data.type ?? null, data.category ?? null, data.phone ?? null, data.note ?? null],
+    [tenantId, id, data.name ?? null, data.type ?? null, data.category ?? null, data.phone ?? null, data.note ?? null,
+     data.tax_number ?? null, data.address ?? null, data.email ?? null],
   ).then((r) => r.rows[0]);
 }
 

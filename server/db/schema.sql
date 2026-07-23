@@ -307,6 +307,37 @@ ALTER TABLE amortization_plans ALTER COLUMN start_date     DROP NOT NULL;
 ALTER TABLE payments        ADD COLUMN IF NOT EXISTS proof_url TEXT;
 ALTER TABLE client_payments ADD COLUMN IF NOT EXISTS proof_url TEXT;
 
+-- ===== Invoice Manager (formal client invoices with line items + VAT + PDF) =====
+-- The client_invoices row carries the header + totals; individual lines live in
+-- client_invoice_items. `amount` stays the grand total so all receivables/payment
+-- logic keeps working unchanged.
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS vat_enabled     BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS vat_rate        NUMERIC(5,2) NOT NULL DEFAULT 18;
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS net_amount      NUMERIC(12,2);
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS vat_amount      NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS amount_in_words TEXT;
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS notes           TEXT;
+ALTER TABLE client_invoices ADD COLUMN IF NOT EXISTS paid_at         DATE;
+
+-- Client (Купувач) contact details used on invoices.
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS tax_number VARCHAR(50);
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS address    TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS email      VARCHAR(200);
+
+CREATE TABLE IF NOT EXISTS client_invoice_items (
+  id                SERIAL PRIMARY KEY,
+  tenant_id         INT NOT NULL REFERENCES tenants(id),
+  client_invoice_id INT NOT NULL REFERENCES client_invoices(id) ON DELETE CASCADE,
+  position          INT NOT NULL DEFAULT 1,        -- Р.б
+  description       TEXT NOT NULL,                 -- Назив на производот
+  quantity          NUMERIC(12,3) NOT NULL DEFAULT 1,
+  unit_price        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  vat_rate          NUMERIC(5,2) NOT NULL DEFAULT 0,
+  vat_amount        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  total             NUMERIC(14,2) NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ci_items ON client_invoice_items (tenant_id, client_invoice_id, position);
+
 -- Audit trail: who did what to money records (mark paid / edit / delete …).
 CREATE TABLE IF NOT EXISTS audit_logs (
   id          BIGSERIAL PRIMARY KEY,
