@@ -337,69 +337,60 @@ async function modelsForKey(apiKey) {
  * itself is fine). Tests each configured key (free, then paid) and, when the
  * chosen model 404s, finds a model the key CAN use and suggests it.
  */
-export async function testConnection(tenantId) {
-  const keys = await resolveKeys(tenantId);
-  const model = await resolveModel(tenantId);
+export async function testConnection(tenantId, tierFilter) {
+  let keys = await resolveKeys(tenantId);
+  if (tierFilter) keys = keys.filter((k) => k.tier === tierFilter);
   if (!keys.length) {
-    return { ok: false, message: 'No API key configured. Paste a key and click “Update key”, then test again.' };
+    return {
+      ok: false,
+      message: tierFilter
+        ? `No ${tierFilter} key configured. Paste the ${tierFilter} key, Update it, then test.`
+        : 'No API key configured. Paste a key and Update it, then test.',
+    };
   }
+  const seqs = await resolveModelSeqs(tenantId);
 
   const perKey = [];
   for (const { key, tier } of keys) {
-    // (1) ListModels validates the key without needing a model — this proves the
-    // stored, encrypted key decrypts and is accepted by Google.
+    // (1) ListModels validates the key (proves the stored key decrypts + Google accepts it).
     const list = await modelsForKey(key);
-    if (!list.ok) {
-      perKey.push({ tier, keyValid: false, message: list.message, status: list.status });
-      continue;
+    if (!list.ok) { perKey.push({ tier, keyValid: false, status: list.status, message: list.message }); continue; }
+    // (2) Try the tier's model sequence (same as real scans); report the first that works.
+    const seq = seqs[tier] || seqs.free;
+    let result = null;
+    for (const model of seq) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with the single word OK.' }] }] }),
+      }).catch((e) => ({ ok: false, status: 0, _err: e.message }));
+      if (resp.ok) { result = { tier, keyValid: true, canGenerate: true, model }; break; }
+      const body = resp.json ? await resp.json().catch(() => ({})) : {};
+      if (!isModelNotFound(resp.status, body?.error?.message || resp._err)) {
+        result = { tier, keyValid: true, canGenerate: false, status: resp.status, message: body?.error?.message || resp._err || `HTTP ${resp.status}` };
+        break; // real error (quota/auth) — stop trying models
+      }
     }
-    // (2) Try a real generateContent with the configured model.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with the single word OK.' }] }] }),
-    });
-    if (resp.ok) {
-      perKey.push({ tier, keyValid: true, canGenerate: true, model });
-      continue;
-    }
-    // Model not available for this key → suggest one that is.
-    const body = await resp.json().catch(() => ({}));
-    const suggestion = list.models[0] || null;
-    perKey.push({
-      tier,
-      keyValid: true,
-      canGenerate: false,
-      model,
-      status: resp.status,
-      message: body?.error?.message || `HTTP ${resp.status}`,
-      availableModels: list.models.slice(0, 12),
-      suggestedModel: suggestion,
-    });
+    perKey.push(result || { tier, keyValid: true, canGenerate: false, message: 'None of the candidate models are available for this key', availableModels: list.models.slice(0, 12), suggestedModel: list.models[0] || null });
   }
 
   const working = perKey.find((k) => k.canGenerate);
   if (working) {
     return { ok: true, model: working.model, keyTier: working.tier, message: `Connection OK — ${working.tier} key, model ${working.model}` };
   }
-
   const first = perKey[0];
-  if (first && first.keyValid === false) {
-    return { ok: false, keyValid: false, status: first.status, message: `Key rejected by Google: ${first.message}`, perKey };
+  if (first?.keyValid === false) {
+    return { ok: false, keyValid: false, status: first.status, message: `${first.tier} key rejected by Google: ${first.message}`, perKey };
   }
-  // Key(s) valid but the model is wrong (the 404 case).
   const withSuggestion = perKey.find((k) => k.suggestedModel);
   return {
     ok: false,
     keyValid: true,
     status: first?.status,
-    model,
     suggestedModel: withSuggestion?.suggestedModel || null,
     availableModels: withSuggestion?.availableModels || [],
-    message:
-      `Your key works, but model “${model}” isn't available for it (${first?.status || 404}). ` +
-      (withSuggestion?.suggestedModel ? `Try “${withSuggestion.suggestedModel}”.` : 'Pick a model from the dropdown.'),
+    message: `${first?.tier || ''} key works, but no usable model. ${withSuggestion?.suggestedModel ? `Try “${withSuggestion.suggestedModel}”.` : first?.message || ''}`.trim(),
     perKey,
   };
 }

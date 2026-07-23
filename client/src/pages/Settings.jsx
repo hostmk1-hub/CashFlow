@@ -51,20 +51,21 @@ export default function Settings() {
     try { await api.put('/settings', { key, value }); setMsg('Saved ✓'); load(); }
     catch (e) { setMsg(e.message); }
   }
-  async function testGemini() {
-    setMsg('Testing…');
+  async function testGemini(tier) {
+    const label = tier === 'paid' ? 'paid key' : tier === 'free' ? 'free key' : '';
+    setMsg(`Testing ${label}…`);
     try {
-      const r = await api.post('/settings/gemini/test');
-      if (r.ok) { setMsg(r.message || `Connection OK (${r.model})`); loadModels(); return; }
-      // Key works but the model is wrong → offer to apply the suggested one.
-      if (r.keyValid && r.suggestedModel) {
+      const r = await api.post('/settings/gemini/test', tier ? { tier } : {});
+      if (r.ok) { setMsg(`✅ ${r.message || `Connection OK (${r.model})`}`); loadModels(); return; }
+      // Key works but the model is wrong → offer to apply the suggested one (free tier only).
+      if (r.keyValid && r.suggestedModel && tier !== 'paid') {
         setMsg(`${r.message} — applying “${r.suggestedModel}”…`);
         await saveSetting('gemini_model', r.suggestedModel);
         await loadModels();
         setMsg(`Model switched to “${r.suggestedModel}”. Test again to confirm.`);
         return;
       }
-      setMsg(r.message || `Failed: status ${r.status}`);
+      setMsg(`❌ ${r.message || `Failed: status ${r.status}`}`);
     } catch (e) { setMsg(e.message); }
   }
   async function sendInvite() {
@@ -84,17 +85,24 @@ export default function Settings() {
         <div className="card pad">
           <h3 className="card-title">AI Integration (Gemini)</h3>
           <Field label="Free-tier API key (tried first)">
-            <input className="input" type="password" placeholder={settings.gemini_api_key || 'not set'} value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
+            <input className="input" type="password" placeholder={geminiKey ? '' : 'paste a new key to replace'} value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} />
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Saved key: <b className="tabnum">{settings.gemini_api_key || 'not set'}</b>
+            </div>
           </Field>
           <div className="toolbar" style={{ marginBottom: 10 }}>
             <button className="btn" disabled={!canManage || !geminiKey} onClick={() => { saveSetting('gemini_api_key', geminiKey); setGeminiKey(''); }}>Update free key</button>
-            <button className="btn ghost" disabled={!canManage} onClick={testGemini}>Test Connection</button>
+            <button className="btn ghost" disabled={!canManage} onClick={() => testGemini('free')}>Test free key</button>
           </div>
           <Field label="Paid API key (fallback — used only if the free key fails)">
-            <input className="input" type="password" placeholder={settings.gemini_api_key_paid || 'not set'} value={geminiKeyPaid} onChange={(e) => setGeminiKeyPaid(e.target.value)} />
+            <input className="input" type="password" placeholder={geminiKeyPaid ? '' : 'paste a new key to replace'} value={geminiKeyPaid} onChange={(e) => setGeminiKeyPaid(e.target.value)} />
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Saved key: <b className="tabnum">{settings.gemini_api_key_paid || 'not set'}</b>
+            </div>
           </Field>
           <div className="toolbar">
             <button className="btn" disabled={!canManage || !geminiKeyPaid} onClick={() => { saveSetting('gemini_api_key_paid', geminiKeyPaid); setGeminiKeyPaid(''); }}>Update paid key</button>
+            <button className="btn ghost" disabled={!canManage} onClick={() => testGemini('paid')}>Test paid key</button>
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Scanning always tries the <b>free key + free model</b> first; the paid key (and its model) is used only when the free one hits its quota/rate limit or fails.</div>
           <Field label="Free-tier model (tried first for every scan)">

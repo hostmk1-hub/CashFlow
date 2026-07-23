@@ -3,7 +3,7 @@ import { settingSchema } from './validation.js';
 import { asyncHandler } from '../../shared/http.js';
 import { requireMinRole } from '../../shared/middleware/auth.js';
 import { query } from '../../shared/db.js';
-import { encrypt } from '../../shared/crypto.js';
+import { encrypt, decrypt } from '../../shared/crypto.js';
 import { testConnection, listModels } from '../../services/geminiService.js';
 import { runBackup, lastBackup, lastVerification } from '../../services/backupService.js';
 import { r2Enabled, smtpEnabled } from '../../shared/config.js';
@@ -15,13 +15,23 @@ const router = Router();
 // Keys whose stored value is encrypted and must never be returned in plaintext.
 const SECRET_KEYS = new Set(['gemini_api_key', 'gemini_api_key_paid', 'rentalsyst_api_key']);
 
+// A partial hint so an admin can verify the RIGHT key is saved without exposing
+// it: first 5 + last 4 characters, middle masked. e.g. "AIzaS…4x9z".
+function keyHint(encrypted) {
+  const dec = decrypt(encrypted);
+  if (!dec) return '••••••••'; // can't decrypt (ENCRYPTION_KEY changed) → just mask
+  const s = String(dec);
+  if (s.length <= 10) return `${s.slice(0, 2)}…${s.slice(-2)}`;
+  return `${s.slice(0, 5)}…${s.slice(-4)}`;
+}
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { rows } = await query(`SELECT key, value FROM settings WHERE tenant_id = $1`, [req.tenantId]);
     const out = {};
     for (const r of rows) {
-      out[r.key] = SECRET_KEYS.has(r.key) ? '••••••••' : r.value; // mask secrets
+      out[r.key] = SECRET_KEYS.has(r.key) ? keyHint(r.value) : r.value; // hint for secrets
     }
     res.json(out);
   }),
@@ -46,7 +56,8 @@ router.post(
   '/gemini/test',
   requireMinRole('admin'),
   asyncHandler(async (req, res) => {
-    res.json(await testConnection(req.tenantId));
+    // Optional { tier: 'free' | 'paid' } tests just that key.
+    res.json(await testConnection(req.tenantId, req.body?.tier));
   }),
 );
 router.get(
