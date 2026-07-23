@@ -18,23 +18,45 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
   const [startDate, setStartDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [ai, setAi] = useState(null); // { tier, model } when read by Gemini
+  const [ai, setAi] = useState(null);      // { tier, model } when read by Gemini
+  const [pages, setPages] = useState(0);   // how many files/pages combined
 
   useEffect(() => { api.get('/companies').then(setCompanies).catch(() => {}); }, []);
+
+  // Combine multi-page uploads into one clean schedule: sort dated rows
+  // chronologically (undated kept in order at the end) and drop exact duplicates
+  // (same month + amount) in case two pages overlap or arrive out of order.
+  function mergeRows(list) {
+    const seen = new Set();
+    const dated = [], undated = [];
+    for (const r of list) {
+      const amt = Number(r.amount) || 0;
+      if (!amt) continue;
+      const key = `${r.due_date || ''}|${amt}`;
+      if (r.due_date && seen.has(key)) continue;   // dedupe only when we have a date to trust
+      if (r.due_date) seen.add(key);
+      (r.due_date ? dated : undated).push({ due_date: r.due_date || '', amount: r.amount });
+    }
+    dated.sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+    return [...dated, ...undated];
+  }
 
   async function onFiles(files) {
     setBusy(true); setErr('');
     try {
       let all = rows || [];
       let aiInfo = ai;
+      let added = 0;
       for (const file of files) {
         const fd = new FormData(); fd.append('file', file);
         const res = await api.upload('/amortization/scan-schedule', fd);
         all = [...all, ...res.schedule.map((r) => ({ due_date: r.due_date || '', amount: r.amount }))];
         if (res.ai_tier) aiInfo = { tier: res.ai_tier, model: res.ai_model };
+        added += 1;
       }
-      setRows(all);
+      setRows(mergeRows(all));   // sync pages: sorted + de-duplicated
       setAi(aiInfo);
+      setPages((p) => p + added);
     } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   }
 
@@ -68,8 +90,8 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
       {err && <div className="error-msg">{err}</div>}
       {!rows ? (
         <>
-          <p className="muted">Upload the leasing company's monthly payment plan for <b>{plate}</b> — a <b>CSV/Excel</b> file, or a <b>photo/PDF</b> of the schedule. We read each month's amount and create one tracked payment per month for this car (up to 120 months). Nothing saves until you confirm.</p>
-          <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" multiple onFiles={onFiles} busy={busy} hint={busy ? 'Reading the schedule…' : 'CSV, Excel, PDF or photo · multiple pages allowed'} />
+          <p className="muted">Upload the leasing company's monthly payment plan for <b>{plate}</b> — a <b>CSV/Excel</b> file, or <b>photos/PDF</b> of the schedule. If the plan spans <b>two pages, drop both</b> (or all pages) at once — they're combined, sorted by date and de-duplicated into one schedule. We create one tracked payment per month (up to 120 months). Nothing saves until you confirm.</p>
+          <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" multiple onFiles={onFiles} busy={busy} hint={busy ? 'Reading the schedule…' : 'Drop both pages · CSV, Excel, PDF or photos'} />
         </>
       ) : (
         <>
@@ -88,7 +110,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
           <Field label="Start date (used only for rows with no date)"><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
 
           {ai && <div style={{ margin: '4px 0 8px' }}><AiBadge tier={ai.tier} model={ai.model} /></div>}
-          <div className="muted" style={{ fontSize: 12, margin: '8px 0 4px' }}>{rows.length} payments · total <b>{mkd(total)}</b> — review and edit, then create.</div>
+          <div className="muted" style={{ fontSize: 12, margin: '8px 0 4px' }}>{rows.length} payments{pages > 1 ? ` from ${pages} pages` : ''} · total <b>{mkd(total)}</b> — review and edit, then create.</div>
           <div style={{ maxHeight: 320, overflow: 'auto' }}>
             <table className="tbl">
               <thead><tr><th style={{ width: 40 }}>#</th><th>Month / date</th><th className="num">Amount</th><th></th></tr></thead>
@@ -105,6 +127,9 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
             </table>
           </div>
           <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={addRow}>+ Add a month</button>
+          <div style={{ marginTop: 12 }}>
+            <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" multiple onFiles={onFiles} busy={busy} hint={busy ? 'Reading…' : 'Add another page — it merges into the list above'} />
+          </div>
         </>
       )}
     </Modal>
