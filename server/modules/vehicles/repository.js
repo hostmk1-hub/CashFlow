@@ -36,7 +36,10 @@ export function amortInvoices(tenantId, vehicleId) {
             (SELECT pa.payment_id FROM payment_allocations pa
              JOIN payments p ON p.id = pa.payment_id
              WHERE pa.invoice_id = i.id AND p.tenant_id = $1
-             ORDER BY p.id DESC LIMIT 1) AS last_payment_id
+             ORDER BY p.id DESC LIMIT 1) AS last_payment_id,
+            (SELECT MAX(p.paid_at) FROM payment_allocations pa
+             JOIN payments p ON p.id = pa.payment_id
+             WHERE pa.invoice_id = i.id AND p.tenant_id = $1) AS last_paid_at
      FROM invoices i
      WHERE i.tenant_id = $1 AND i.vehicle_id = $2 AND i.amort_plan_id IS NOT NULL
      ORDER BY i.due_date`,
@@ -98,7 +101,12 @@ export function pnl(tenantId, id) {
 }
 export function expenses(tenantId, id) {
   return query(
-    `SELECT * FROM invoices WHERE tenant_id = $1 AND vehicle_id = $2 ORDER BY due_date DESC`,
+    `SELECT i.*,
+            (SELECT MAX(p.paid_at) FROM payment_allocations pa
+             JOIN payments p ON p.id = pa.payment_id
+             WHERE pa.invoice_id = i.id AND p.tenant_id = $1) AS last_paid_at
+     FROM invoices i
+     WHERE i.tenant_id = $1 AND i.vehicle_id = $2 ORDER BY i.due_date DESC`,
     [tenantId, id],
   ).then((r) => r.rows);
 }

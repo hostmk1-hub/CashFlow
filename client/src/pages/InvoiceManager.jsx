@@ -113,7 +113,10 @@ export default function InvoiceManager() {
                 <td className="muted">{date(i.issue_date)}</td>
                 <td>{i.company_name}</td>
                 <td className="num">{mkd(i.amount)}</td>
-                <td><StatusBadge status={i.status} /></td>
+                <td>
+                  <StatusBadge status={i.status} />
+                  {i.status === 'paid' && i.paid_at && <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>on {date(i.paid_at)}</div>}
+                </td>
                 <td className="num" style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn ghost sm" title="View / print PDF" onClick={() => api.openFile(`/client-invoices/${i.id}/pdf`).catch((e) => alert(e.message))}>🖨 PDF</button>{' '}
                   <button className="btn ghost sm" title="Edit" onClick={() => openEdit(i)}>✎</button>{' '}

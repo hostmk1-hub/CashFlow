@@ -110,6 +110,33 @@ function logoBuffer(dataUrl) {
   try { return Buffer.from(dataUrl.slice(comma + 1), 'base64'); } catch { return null; }
 }
 
+// Modern 2026 palette — slate ink + warm accent, soft hairlines.
+const INK = '#0F172A';
+const MUT = '#64748B';
+const LINE = '#E2E8F0';
+const ZEBRA = '#F8FAFC';
+const ACCENT = '#E4572E';
+const PAGE_W = 595.28;
+
+const STATUS_MK = {
+  paid: 'ПЛАТЕНО', sent: 'НЕПЛАТЕНО', partial: 'ДЕЛУМНО', overdue: 'ЗАДОЦНЕТО',
+  draft: 'НАЦРТ', cancelled: 'ОТКАЖАНО',
+};
+const STATUS_COLORS = {
+  paid: ['#DCFCE7', '#166534'], sent: ['#FEF9C3', '#854D0E'], partial: ['#DBEAFE', '#1E40AF'],
+  overdue: ['#FEE2E2', '#991B1B'], draft: ['#F1F5F9', '#475569'], cancelled: ['#F1F5F9', '#475569'],
+};
+
+function pill(doc, x, y, text, F) {
+  const [bg, fg] = STATUS_COLORS[text] ? STATUS_COLORS[text] : ['#F1F5F9', '#475569'];
+  const label = STATUS_MK[text] || String(text).toUpperCase();
+  doc.font(F.bold).fontSize(8.5);
+  const w = doc.widthOfString(label) + 18;
+  doc.roundedRect(x, y, w, 16, 8).fill(bg);
+  doc.fillColor(fg).text(label, x + 9, y + 4.5, { lineBreak: false });
+  return w;
+}
+
 /**
  * Render a formal client invoice (ФАКТУРА) to a PDF Buffer, laid out to match
  * the МОМО reference: logo + company block header, invoice number/date, boxed
@@ -133,20 +160,28 @@ export async function generateClientInvoicePdfBuffer(tenantId, invoice) {
     const L = 40;
     const R = 555;
 
+    // Slim accent band across the very top — the modern signature touch.
+    doc.rect(0, 0, PAGE_W, 5).fill(ACCENT);
+
     // ── Header: logo left, company block right ──
     const logo = logoBuffer(s.logoUrl);
     if (logo) {
-      try { doc.image(logo, L, 40, { fit: [150, 70] }); } catch { /* ignore bad image */ }
+      try { doc.image(logo, L, 34, { fit: [150, 66] }); } catch { /* ignore bad image */ }
     }
-    let hy = 40;
-    const hx = 320;
-    doc.fillColor('#111').font(F.bold).fontSize(11).text(s.name || '', hx, hy, { width: R - hx });
-    hy = doc.y + 1;
-    doc.font(F.regular).fontSize(8.5).fillColor('#333');
+    let hy = 36;
+    const hx = 322;
+    doc.fillColor(INK).font(F.bold).fontSize(13).text(s.name || '', hx, hy, { width: R - hx });
+    hy = doc.y + 3;
+    doc.fontSize(8.5);
     const headerLine = (label, val) => {
       if (val == null || val === '') return;
-      doc.text(`${label}${label ? '  ' : ''}${val}`, hx, hy, { width: R - hx });
-      hy = doc.y + 0.5;
+      if (label) {
+        doc.font(F.regular).fillColor(MUT).text(`${label} `, hx, hy, { continued: true, width: R - hx });
+        doc.fillColor(INK).text(val, { continued: false });
+      } else {
+        doc.font(F.regular).fillColor(INK).text(val, hx, hy, { width: R - hx });
+      }
+      hy = doc.y + 1.5;
     };
     if (s.address) headerLine('', s.address);
     headerLine('Тел:', s.phone);
@@ -157,31 +192,35 @@ export async function generateClientInvoicePdfBuffer(tenantId, invoice) {
       if (b?.accountNo) headerLine('Жиро Сметка:', `${b.accountNo}${b.bankName ? ' - ' + b.bankName : ''}`);
     }
 
-    // ── Title + number/date (left), Купувач box (right) ──
-    const titleY = Math.max(hy + 24, 150);
-    doc.font(F.bold).fontSize(24).fillColor('#111').text('ФАКТУРА', L, titleY);
-    let ly = doc.y + 8;
-    doc.fontSize(11);
-    doc.font(F.bold).text('Број на Фактура:', L, ly, { continued: false });
-    doc.font(F.bold).fontSize(13).text(invoice.invoice_number || '', L + 130, ly - 1);
-    ly += 26;
-    doc.font(F.bold).fontSize(11).text('Датум:', L, ly);
-    doc.font(F.regular).text(fmtDate(invoice.issue_date), L + 130, ly);
+    // ── Title + number/date (left), Купувач card (right) ──
+    const titleY = Math.max(hy + 26, 150);
+    doc.font(F.bold).fontSize(26).fillColor(INK).text('ФАКТУРА', L, titleY, { characterSpacing: 1 });
+    // status pill next to the title
+    pill(doc, L + doc.widthOfString('ФАКТУРА') + 14, titleY + 8, invoice.status || 'sent', F);
 
-    // Купувач box
-    const bx = 320;
+    let ly = titleY + 40;
+    const lblVal = (label, val, big) => {
+      doc.font(F.regular).fontSize(9).fillColor(MUT).text(label, L, ly);
+      doc.font(F.bold).fontSize(big ? 14 : 11).fillColor(INK).text(val, L + 118, ly - (big ? 3 : 0));
+      ly += 22;
+    };
+    lblVal('Број на Фактура', invoice.invoice_number || '', true);
+    lblVal('Датум', fmtDate(invoice.issue_date), false);
+    if (invoice.status === 'paid' && invoice.paid_at) lblVal('Платено на', fmtDate(invoice.paid_at), false);
+
+    // Купувач card
+    const bx = 322;
     const bw = R - bx;
-    doc.rect(bx, titleY, bw, 18).lineWidth(0.8).strokeColor('#111').stroke();
-    doc.font(F.bold).fontSize(10).fillColor('#111').text('Купувач', bx, titleY + 5, { width: bw, align: 'center' });
-    doc.font(F.regular).fontSize(10).fillColor('#111');
-    let cy = titleY + 26;
-    doc.text(invoice.company_name || '', bx + 4, cy, { width: bw - 8 });
-    cy = doc.y;
-    doc.fontSize(8.5).fillColor('#444');
-    if (invoice.company_tax_number) { doc.text(`ЕДБ: ${invoice.company_tax_number}`, bx + 4, cy + 1, { width: bw - 8 }); cy = doc.y; }
-    if (invoice.company_address) doc.text(invoice.company_address, bx + 4, cy + 1, { width: bw - 8 });
+    const bh = 74;
+    doc.roundedRect(bx, titleY, bw, bh, 8).fillAndStroke('#FCFCFD', LINE);
+    doc.font(F.bold).fontSize(8).fillColor(MUT).text('КУПУВАЧ', bx + 12, titleY + 10, { characterSpacing: 1 });
+    doc.font(F.bold).fontSize(12).fillColor(INK).text(invoice.company_name || '', bx + 12, titleY + 24, { width: bw - 24 });
+    let cy = doc.y + 1;
+    doc.font(F.regular).fontSize(8.5).fillColor(MUT);
+    if (invoice.company_tax_number) { doc.text(`ЕДБ: ${invoice.company_tax_number}`, bx + 12, cy, { width: bw - 24 }); cy = doc.y; }
+    if (invoice.company_address) doc.text(invoice.company_address, bx + 12, cy, { width: bw - 24 });
 
-    // ── Items table ──
+    // ── Items table (modern: dark header band, zebra rows, hairline separators) ──
     const cols = [
       { key: 'rb', label: 'Р.б', x: L, w: 28, align: 'center' },
       { key: 'desc', label: 'Назив на производот', x: 68, w: 190, align: 'left' },
@@ -191,19 +230,20 @@ export async function generateClientInvoicePdfBuffer(tenantId, invoice) {
       { key: 'vatp', label: 'ДДВ%', x: 453, w: 37, align: 'right' },
       { key: 'total', label: 'Вкупно', x: 490, w: 65, align: 'right' },
     ];
-    let ty = Math.max(cy + 40, titleY + 120);
-    const headH = 26;
-    // header
-    doc.rect(L, ty, R - L, headH).fill('#f0f0f0');
-    doc.fillColor('#111').font(F.bold).fontSize(8.5);
-    for (const c of cols) doc.text(c.label, c.x + 3, ty + 8, { width: c.w - 6, align: c.align });
+    const ty = Math.max(titleY + bh + 28, 260);
+    const headH = 24;
+    doc.roundedRect(L, ty, R - L, headH, 4).fill(INK);
+    doc.fillColor('#fff').font(F.bold).fontSize(8);
+    for (const c of cols) doc.text(c.label, c.x + 4, ty + 8, { width: c.w - 8, align: c.align });
+
+    // rows (measure heights, draw zebra behind text)
     let ry = ty + headH;
-    doc.font(F.regular).fontSize(9).fillColor('#111');
-    const rowGap = 6;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
-      const descH = doc.heightOfString(it.description || '', { width: cols[1].w - 6 });
-      const rowH = Math.max(20, descH + rowGap);
+      doc.font(F.regular).fontSize(9);
+      const descH = doc.heightOfString(it.description || '', { width: cols[1].w - 8 });
+      const rowH = Math.max(22, descH + 10);
+      if (i % 2 === 1) doc.rect(L, ry, R - L, rowH).fill(ZEBRA);
       const cells = {
         rb: String(it.position ?? i + 1),
         desc: it.description || '',
@@ -213,65 +253,62 @@ export async function generateClientInvoicePdfBuffer(tenantId, invoice) {
         vatp: `${Number(it.vat_rate) || 0}`,
         total: fmtNum(it.total),
       };
-      for (const c of cols) doc.text(cells[c.key], c.x + 3, ry + 4, { width: c.w - 6, align: c.align });
+      doc.fillColor(INK).font(F.regular).fontSize(9);
+      for (const c of cols) {
+        if (c.key === 'total') doc.font(F.bold);
+        doc.text(cells[c.key], c.x + 4, ry + 5, { width: c.w - 8, align: c.align });
+        doc.font(F.regular);
+      }
+      doc.moveTo(L, ry + rowH).lineTo(R, ry + rowH).lineWidth(0.4).strokeColor(LINE).stroke();
       ry += rowH;
     }
-    // extend the grid to a comfortable minimum so it reads like the sample
-    const tableBottom = Math.max(ry, ty + headH + 240, 560);
-    // outer border + column verticals + header underline
-    doc.lineWidth(0.8).strokeColor('#111');
-    doc.rect(L, ty, R - L, tableBottom - ty).stroke();
-    doc.moveTo(L, ty + headH).lineTo(R, ty + headH).stroke();
-    doc.lineWidth(0.5).strokeColor('#333');
-    for (const c of cols) if (c.x !== L) doc.moveTo(c.x, ty).lineTo(c.x, tableBottom).stroke();
+    const tableBottom = Math.max(ry, ty + headH + 150, 470);
+    // soft outer frame (rounded) around the whole table
+    doc.roundedRect(L, ty, R - L, tableBottom - ty, 4).lineWidth(0.6).strokeColor(LINE).stroke();
 
-    // ── Words box (left) + totals (right) ──
-    const sumY = tableBottom + 16;
-    // Износ со букви
-    const wbW = 260;
-    doc.lineWidth(0.8).strokeColor('#111').rect(L, sumY, wbW, 18).stroke();
-    doc.font(F.bold).fontSize(9.5).fillColor('#111').text('Износ со букви', L, sumY + 5, { width: wbW, align: 'center' });
-    doc.lineWidth(0.6).rect(L, sumY + 18, wbW, 54).stroke();
-    doc.font(F.regular).fontSize(9.5).fillColor('#111').text(invoice.amount_in_words || '', L + 6, sumY + 26, { width: wbW - 12 });
+    // ── Words card (left) + totals (right) ──
+    const sumY = tableBottom + 20;
+    const wbW = 250;
+    doc.roundedRect(L, sumY, wbW, 74, 8).fillAndStroke('#FCFCFD', LINE);
+    doc.font(F.bold).fontSize(8).fillColor(MUT).text('ИЗНОС СО БУКВИ', L + 12, sumY + 10, { characterSpacing: 1 });
+    doc.font(F.regular).fontSize(9.5).fillColor(INK).text(invoice.amount_in_words || '', L + 12, sumY + 26, { width: wbW - 24 });
 
-    // Totals (right)
-    const tlx = 330;
+    // Totals block (right)
+    const tlx = 322;
     const tvx = R;
-    doc.fontSize(10).fillColor('#111');
-    doc.font(F.bold).text('НЕТО ИЗНОС', tlx, sumY + 2, { width: 130 });
-    doc.font(F.bold).text(fmtCur(invoice.net_amount ?? invoice.original_amount ?? invoice.amount, cur), tlx, sumY + 2, { width: tvx - tlx, align: 'right' });
-    doc.moveTo(tlx, sumY + 20).lineTo(tvx, sumY + 20).lineWidth(0.5).strokeColor('#ccc').stroke();
+    const netVal = invoice.net_amount ?? invoice.original_amount ?? invoice.amount;
     const vatRate = invoice.vat_enabled ? Number(invoice.vat_rate) || 0 : 0;
-    doc.font(F.regular).text(`Пресметан ДДВ ${vatRate}%`, tlx, sumY + 26, { width: 150 });
-    doc.text(fmtCur(invoice.vat_amount || 0, cur), tlx, sumY + 26, { width: tvx - tlx, align: 'right' });
-    doc.moveTo(tlx, sumY + 44).lineTo(tvx, sumY + 44).stroke();
-    doc.font(F.bold).fontSize(14).text('Вкупно', tlx, sumY + 52, { width: 100 });
-    doc.font(F.bold).fontSize(14).text(fmtCur(invoice.original_amount ?? invoice.amount, cur), tlx, sumY + 52, { width: tvx - tlx, align: 'right' });
+    doc.font(F.regular).fontSize(10).fillColor(MUT).text('НЕТО ИЗНОС', tlx, sumY + 2, { width: 150 });
+    doc.font(F.bold).fillColor(INK).text(fmtCur(netVal, cur), tlx, sumY + 2, { width: tvx - tlx, align: 'right' });
+    doc.font(F.regular).fillColor(MUT).text(`Пресметан ДДВ ${vatRate}%`, tlx, sumY + 22, { width: 160 });
+    doc.font(F.bold).fillColor(INK).text(fmtCur(invoice.vat_amount || 0, cur), tlx, sumY + 22, { width: tvx - tlx, align: 'right' });
+    // Вкупно highlighted bar
+    const barY = sumY + 44;
+    doc.roundedRect(tlx, barY, tvx - tlx, 30, 6).fill(INK);
+    doc.font(F.bold).fontSize(12).fillColor('#fff').text('Вкупно', tlx + 12, barY + 9, { lineBreak: false });
+    doc.font(F.bold).fontSize(13).fillColor('#fff').text(fmtCur(invoice.original_amount ?? invoice.amount, cur), tlx, barY + 8, { width: tvx - tlx - 12, align: 'right' });
 
     // ── Disclaimer ──
-    let fy = sumY + 90;
-    doc.font(F.regular).fontSize(8.5).fillColor('#333');
+    let fy = Math.max(sumY + 92, barY + 44);
+    doc.font(F.regular).fontSize(8.5).fillColor(MUT);
     if (s.footerNote1) { doc.text(s.footerNote1, L, fy); fy = doc.y; }
     if (s.footerNote2) { doc.text(s.footerNote2, L, fy + 1); fy = doc.y; }
 
-    // ── Signatures ── (pinned above the footer; lineBreak:false so a long label
-    // can't push the cursor onto a second page)
-    const sigY = Math.min(Math.max(fy + 45, 700), 726);
+    // ── Signatures ── (pinned above the footer; lineBreak:false guards page breaks)
+    const sigY = Math.min(Math.max(fy + 48, 700), 726);
     const labels = [s.signatureLabels?.received || 'Примил', s.signatureLabels?.invoicedBy || 'Фактурирал', s.signatureLabels?.director || 'Директор'];
     const segW = (R - L) / 3;
-    doc.font(F.bold).fontSize(10).fillColor('#111');
     labels.forEach((lab, i) => {
       const cxc = L + segW * i;
-      doc.text(lab, cxc, sigY, { width: segW, align: 'center', lineBreak: false });
-      const lineY = sigY + 24;
-      doc.lineWidth(0.8).strokeColor('#111').moveTo(cxc + 20, lineY).lineTo(cxc + segW - 20, lineY).stroke();
+      doc.lineWidth(0.8).strokeColor('#CBD5E1').moveTo(cxc + 24, sigY).lineTo(cxc + segW - 24, sigY).stroke();
+      doc.font(F.regular).fontSize(9).fillColor(MUT).text(lab, cxc, sigY + 6, { width: segW, align: 'center', lineBreak: false });
     });
 
     // ── Footer strip ── (kept inside the bottom margin: A4 height 841.89 − 40)
     const footParts = [s.name, s.website, s.email, s.phone].filter(Boolean);
-    doc.moveTo(L, 784).lineTo(R, 784).lineWidth(0.5).strokeColor('#bbb').stroke();
-    doc.font(F.regular).fontSize(8).fillColor('#555')
-      .text(footParts.join('  ●  '), L, 789, { width: R - L, align: 'center', height: 11, lineBreak: false });
+    doc.moveTo(L, 786).lineTo(R, 786).lineWidth(0.5).strokeColor(LINE).stroke();
+    doc.font(F.regular).fontSize(8).fillColor(MUT)
+      .text(footParts.join('   ·   '), L, 791, { width: R - L, align: 'center', height: 11, lineBreak: false });
 
     doc.end();
   });

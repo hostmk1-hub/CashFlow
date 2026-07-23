@@ -154,7 +154,10 @@ export default function VehicleDetail() {
                 <td>{r.label}</td>
                 <td className="muted">{r.month ? date(r.month) : '—'}</td>
                 <td className="num">{mkd(r.amount)}{r.status === 'paid' && Number(r.paid_amount) !== Number(r.amount) ? <span className="muted"> (paid {mkd(r.paid_amount)})</span> : ''}</td>
-                <td><Badge tone={r.status === 'paid' ? 'green' : r.status === 'due' ? 'red' : 'gray'}>{r.status === 'paid' ? 'Paid' : r.status === 'due' ? 'Due' : 'Upcoming'}</Badge></td>
+                <td>
+                  <Badge tone={r.status === 'paid' ? 'green' : r.status === 'due' ? 'red' : 'gray'}>{r.status === 'paid' ? 'Paid' : r.status === 'due' ? 'Due' : 'Upcoming'}</Badge>
+                  {r.status === 'paid' && r.paid_at && <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>on {date(r.paid_at)}</div>}
+                </td>
                 <td className="num">
                   {r.status !== 'paid'
                     ? <button className="btn ghost sm" onClick={() => setMarking(r)}>Mark paid</button>
@@ -188,9 +191,20 @@ export default function VehicleDetail() {
       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div className="card table-wrap">
           <div className="pad" style={{ paddingBottom: 0 }}><h3 className="card-title">Expenses</h3></div>
-          <table className="tbl"><thead><tr><th>Description</th><th>Due</th><th className="num">Amount</th></tr></thead>
-            <tbody>{d.expenses.map((e) => <tr key={e.id}><td>{e.description} <EurBadge currency={e.currency} original={e.original_amount} /></td><td className="muted">{date(e.due_date)}</td><td className="num">{mkd(e.amount)}</td></tr>)}
-            {d.expenses.length === 0 && <tr><td colSpan={3} className="muted">No expenses.</td></tr>}</tbody></table>
+          <table className="tbl"><thead><tr><th>Description</th><th>Due</th><th className="num">Amount</th><th>Status</th><th className="num"></th></tr></thead>
+            <tbody>{d.expenses.map((e) => (
+              <tr key={e.id}>
+                <td>{e.description} <EurBadge currency={e.currency} original={e.original_amount} /></td>
+                <td className="muted">{date(e.due_date)}</td>
+                <td className="num">{mkd(e.amount)}</td>
+                <td>
+                  <Badge tone={e.bucket === 'paid' ? 'green' : e.bucket === 'due' ? 'red' : 'gray'}>{e.bucket === 'paid' ? 'Paid' : e.bucket === 'due' ? 'Due' : 'Upcoming'}</Badge>
+                  {e.bucket === 'paid' && e.last_paid_at && <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>on {date(e.last_paid_at)}</div>}
+                </td>
+                <td className="num">{e.bucket !== 'paid' && <button className="btn ghost sm" onClick={() => setMarking({ invoiceId: e.id, remaining: Number(e.remaining ?? e.amount), label: e.description })}>Mark paid</button>}</td>
+              </tr>
+            ))}
+            {d.expenses.length === 0 && <tr><td colSpan={5} className="muted">No expenses.</td></tr>}</tbody></table>
         </div>
         <div className="card table-wrap">
           <div className="pad" style={{ paddingBottom: 0 }}><h3 className="card-title">Monthly income</h3></div>

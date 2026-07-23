@@ -26,11 +26,15 @@ export async function remove(tenantId, id) {
 
 export async function detail(tenantId, id) {
   const vehicle = await getById(tenantId, id);
+  const expenses = (await repo.expenses(tenantId, id)).map((e) => {
+    const paid = e.status === 'paid';
+    return { ...e, paid, bucket: rowStatus(paid, e.due_date) };
+  });
   return {
     vehicle,
     plans: await repo.plansFor(tenantId, id),
     amortization: await repo.amortization(tenantId, id),
-    expenses: await repo.expenses(tenantId, id),
+    expenses,
     income: await repo.incomeRows(tenantId, id),
     pnl: await repo.pnl(tenantId, id),
   };
@@ -64,6 +68,7 @@ export async function installments(tenantId, vehicleId) {
       paid,
       status: rowStatus(paid, inv.due_date),
       last_payment_id: inv.last_payment_id || null,
+      paid_at: inv.last_paid_at || null,
     };
   });
   return {
