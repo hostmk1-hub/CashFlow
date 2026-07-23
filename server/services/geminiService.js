@@ -76,6 +76,18 @@ const CYRILLIC_NOTE =
   'Extract text exactly as printed, preserving the original script — do not transliterate. ' +
   'Detect currency from symbols or text such as €, EUR, ден, MKD, денари.';
 
+// Bound each Gemini call so a hung upstream returns an error instead of leaving
+// the client request pending forever (which surfaces as "Failed to fetch").
+async function fetchWithTimeout(url, opts, ms = 45000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function requestOnce({ apiKey, model, prompt, file }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
@@ -89,12 +101,11 @@ async function requestOnce({ apiKey, model, prompt, file }) {
     ],
     generationConfig: { responseMimeType: 'application/json' },
   };
-  const resp = await fetch(url, {
+  return fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return resp;
 }
 
 async function requestText({ apiKey, model, prompt, json = false }) {
@@ -103,7 +114,7 @@ async function requestText({ apiKey, model, prompt, json = false }) {
     contents: [{ parts: [{ text: prompt }] }],
     ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
   };
-  return fetch(url, {
+  return fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

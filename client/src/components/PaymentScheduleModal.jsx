@@ -22,14 +22,19 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
 
   useEffect(() => { api.get('/companies').then(setCompanies).catch(() => {}); }, []);
 
-  async function onFile(file) {
-    if (!file) return;
+  async function onFiles(files) {
     setBusy(true); setErr('');
     try {
-      const fd = new FormData(); fd.append('file', file);
-      const res = await api.upload('/amortization/scan-schedule', fd);
-      setRows(res.schedule.map((r) => ({ due_date: r.due_date || '', amount: r.amount })));
-      setAi(res.ai_tier ? { tier: res.ai_tier, model: res.ai_model } : null);
+      let all = rows || [];
+      let aiInfo = ai;
+      for (const file of files) {
+        const fd = new FormData(); fd.append('file', file);
+        const res = await api.upload('/amortization/scan-schedule', fd);
+        all = [...all, ...res.schedule.map((r) => ({ due_date: r.due_date || '', amount: r.amount }))];
+        if (res.ai_tier) aiInfo = { tier: res.ai_tier, model: res.ai_model };
+      }
+      setRows(all);
+      setAi(aiInfo);
     } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   }
 
@@ -64,7 +69,7 @@ export default function PaymentScheduleModal({ vehicleId, plate, defaultCompanyI
       {!rows ? (
         <>
           <p className="muted">Upload the leasing company's monthly payment plan for <b>{plate}</b> — a <b>CSV/Excel</b> file, or a <b>photo/PDF</b> of the schedule. We read each month's amount and create one tracked payment per month for this car (up to 120 months). Nothing saves until you confirm.</p>
-          <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" onFiles={(files) => onFile(files[0])} busy={busy} hint={busy ? 'Reading the schedule…' : 'CSV, Excel, PDF or photo'} />
+          <Dropzone accept=".csv,.xlsx,text/csv,.pdf,application/pdf,image/*" multiple onFiles={onFiles} busy={busy} hint={busy ? 'Reading the schedule…' : 'CSV, Excel, PDF or photo · multiple pages allowed'} />
         </>
       ) : (
         <>

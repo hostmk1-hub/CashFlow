@@ -1,5 +1,6 @@
 // Small shared UI primitives used across pages.
 import { useState, useRef } from 'react';
+import { compressImage } from '../lib/image.js';
 
 /**
  * Drag-and-drop file zone (also click-to-browse). Calls onFiles(File[]) — always
@@ -8,9 +9,12 @@ import { useState, useRef } from 'react';
 export function Dropzone({ accept, multiple = false, onFiles, busy, hint }) {
   const inputRef = useRef(null);
   const [over, setOver] = useState(false);
-  const pick = (fileList) => {
-    const files = Array.from(fileList || []);
-    if (files.length) onFiles(multiple ? files : [files[0]]);
+  const pick = async (fileList) => {
+    let files = Array.from(fileList || []);
+    if (!files.length) return;
+    // Shrink big photos before handing them up (faster upload, avoids stalls).
+    files = await Promise.all(files.map((f) => compressImage(f)));
+    onFiles(multiple ? files : [files[0]]);
   };
   return (
     <div

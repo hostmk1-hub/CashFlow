@@ -33,9 +33,23 @@ async function request(method, path, body, isForm = false) {
     headers['Content-Type'] = 'application/json';
     payload = JSON.stringify(body);
   }
-  const res = await fetch(`/api${path}`, { method, headers, body: payload });
+  let res;
+  try {
+    res = await fetch(`/api${path}`, { method, headers, body: payload });
+  } catch (e) {
+    // Network-level failure (connection dropped, request too large, timeout).
+    const err = new Error(
+      isForm
+        ? 'Upload failed — the connection dropped or the file is too large. Try again, or use a smaller/clearer photo.'
+        : 'Network error — check your connection and try again.',
+    );
+    err.status = 0;
+    err.cause = e;
+    throw err;
+  }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text?.slice(0, 200) }; }
   if (!res.ok) {
     const err = new Error(data?.error || `Request failed (${res.status})`);
     err.status = res.status;
