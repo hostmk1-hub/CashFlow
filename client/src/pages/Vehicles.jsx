@@ -29,6 +29,21 @@ function leaseEnd(v) {
   d.setMonth(d.getMonth() + (Number(v.months_total) - 1)); // month of the final installment
   return String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
 }
+// Inclusive month count from start to finish (both months counted).
+function monthsBetween(a, b) {
+  const s = new Date(a), f = new Date(b);
+  if (isNaN(s) || isNaN(f)) return 0;
+  const m = (f.getFullYear() - s.getFullYear()) * 12 + (f.getMonth() - s.getMonth()) + 1;
+  return m > 0 ? m : 0;
+}
+// start + N months → the month of the final installment (as YYYY-MM-DD).
+function addMonthsDate(dateStr, n) {
+  const d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().slice(0, 10);
+}
+function fmtMon(d) { const x = new Date(d); return isNaN(x) ? '—' : String(x.getMonth() + 1).padStart(2, '0') + '.' + x.getFullYear(); }
 
 export default function Vehicles() {
   const nav = useNavigate();
@@ -124,7 +139,7 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
   const [f, setF] = useState({ plate: '', make: '', model: '', year: new Date().getFullYear(), rentalsyst_id: '', ...vehicle });
   const [companies, setCompanies] = useState([]);
   const [planId, setPlanId] = useState(null);
-  const [l, setL] = useState({ company_id: '', lease_number: '', purchase_price: '', monthly_amount: '', total_amount: '', months_total: '', start_date: '', currency: 'MKD' });
+  const [l, setL] = useState({ company_id: '', lease_number: '', purchase_price: '', monthly_amount: '', total_amount: '', months_total: '', start_date: '', finish_date: '', currency: 'MKD' });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -137,11 +152,14 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
         const p = d.plans?.[0];
         if (p) {
           setPlanId(p.id);
+          const start = p.start_date ? String(p.start_date).slice(0, 10) : '';
           setL({
             company_id: p.company_id || '', lease_number: p.lease_number || '',
             purchase_price: p.purchase_price ?? '', monthly_amount: p.monthly_amount == null ? '' : String(p.monthly_amount),
             total_amount: p.total_amount == null ? '' : String(p.total_amount), months_total: p.months_total ?? '',
-            start_date: p.start_date ? String(p.start_date).slice(0, 10) : '', currency: p.currency || 'MKD',
+            start_date: start,
+            finish_date: start && p.months_total ? addMonthsDate(start, p.months_total - 1) : '',
+            currency: p.currency || 'MKD',
           });
         }
       }).catch(() => {});
@@ -164,10 +182,12 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
       else await api.put(`/vehicles/${vehicle.id}`, body);
 
       if (leaseTouched) {
+        // Prefer an explicit finish date to derive the number of payments.
+        const months = (l.start_date && l.finish_date) ? monthsBetween(l.start_date, l.finish_date) : num(l.months_total);
         const leasePayload = {
           company_id: Number(l.company_id), lease_number: l.lease_number || null,
           purchase_price: num(l.purchase_price), monthly_amount: num(l.monthly_amount),
-          total_amount: num(l.total_amount), months_total: num(l.months_total),
+          total_amount: num(l.total_amount), months_total: months || null,
           start_date: l.start_date || null, currency: l.currency,
         };
         if (planId) {
@@ -214,13 +234,30 @@ function VehicleModal({ vehicle, onClose, onSaved }) {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Monthly amount</Label><Input type="number" value={l.monthly_amount} onChange={setLease('monthly_amount')} /></div>
-          <div><Label>Lease total</Label><Input type="number" value={l.total_amount} onChange={setLease('total_amount')} /></div>
+          <div><Label>Monthly payment</Label><Input type="number" value={l.monthly_amount} onChange={setLease('monthly_amount')} /></div>
+          <div><Label>Total lease</Label><Input type="number" value={l.total_amount} onChange={setLease('total_amount')} /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Months</Label><Input type="number" value={l.months_total} onChange={setLease('months_total')} /></div>
           <div><Label>Start date</Label><Input type="date" value={l.start_date} onChange={setLease('start_date')} /></div>
+          <div><Label>Finish date</Label><Input type="date" value={l.finish_date} onChange={setLease('finish_date')} /></div>
         </div>
+        {(() => {
+          const months = (l.start_date && l.finish_date) ? monthsBetween(l.start_date, l.finish_date) : (Number(l.months_total) || 0);
+          if (!(l.company_id && months > 0 && (l.monthly_amount || l.total_amount))) return null;
+          const monthly = Number(l.monthly_amount) || 0;
+          const total = Number(l.total_amount) || monthly * months;
+          const impliedMonthly = monthly || (total && months ? Math.round(total / months) : 0);
+          const mismatch = monthly && total && Math.abs(monthly * months - total) > months; // >1 денар/mo drift
+          return (
+            <div className="preview-box" style={{ borderLeft: `3px solid ${mismatch ? 'var(--neg)' : 'var(--pos)'}` }}>
+              <b>{months}</b> monthly payments of <b>{mkd(impliedMonthly)}</b> · Total <b>{mkd(total)}</b><br />
+              Starts <b>{fmtMon(l.start_date)}</b> → ends <b>{l.finish_date ? fmtMon(l.finish_date) : fmtMon(addMonthsDate(l.start_date, months - 1))}</b>
+              {mismatch
+                ? <div className="text-[12px]" style={{ color: 'var(--neg)', marginTop: 4 }}>⚠ Monthly × months ({mkd(monthly * months)}) doesn’t match the total ({mkd(total)}) — double-check.</div>
+                : <div className="text-[12px] text-muted-foreground" style={{ marginTop: 4 }}>✓ Looks consistent.</div>}
+            </div>
+          );
+        })()}
         {planId && <div className="text-[12px] text-muted-foreground">Editing the lease moves its installments to the selected company and updates the monthly amount on unpaid installments; the term length isn’t regenerated.</div>}
       </DialogBody>
       <DialogFooter>
